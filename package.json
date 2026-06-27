@@ -1,0 +1,11 @@
+{
+  "devDependencies": {
+    "dotenv": "^17.4.2",
+    "prisma": "^6.19.3",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.22.4"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3"
+  }
+}
