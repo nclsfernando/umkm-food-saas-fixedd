@@ -1,3 +1,4 @@
+cat > /c/Users/Acer/Downloads/umkm-food-saas-fixed/project/backend/prisma/schema.prisma << 'EOF'
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,14 +9,15 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
+  id           String    @id @default(cuid())
+  email        String    @unique
   passwordHash String
   name         String?
   businessName String?
-  role         String   @default("user")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  role         String    @default("user")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  expenses     Expense[]
 }
 
 model Category {
@@ -25,21 +27,25 @@ model Category {
 }
 
 model Product {
-  id         String      @id @default(cuid())
-  name       String
-  price      Decimal
-  categoryId String
-  category   Category    @relation(fields: [categoryId], references: [id])
-  isActive   Boolean     @default(true)
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-  orderItems OrderItem[]
+  id           String   @id @default(cuid())
+  name         String
+  sellingPrice Decimal
+  hpp          Decimal
+  categoryId   String
+  category     Category @relation(fields: [categoryId], references: [id])
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model Order {
   id          String      @id @default(cuid())
   orderDate   DateTime    @default(now())
-  totalAmount Decimal
+  marketplace String?
+  grossSales  Decimal
+  discount    Decimal     @default(0)
+  commission  Decimal     @default(0)
+  netSales    Decimal
   status      String      @default("PENDING")
   items       OrderItem[]
   settlement  Settlement?
@@ -48,29 +54,31 @@ model Order {
 }
 
 model OrderItem {
-  id        String  @id @default(cuid())
-  orderId   String
-  order     Order   @relation(fields: [orderId], references: [id])
-  productId String
-  product   Product @relation(fields: [productId], references: [id])
-  quantity  Int
-  price     Decimal
+  id          String  @id @default(cuid())
+  orderId     String
+  order       Order   @relation(fields: [orderId], references: [id])
+  productName String
+  qty         Int
+  unitPrice   Decimal
+  subtotal    Decimal
 }
 
 model Settlement {
-  id             String   @id @default(cuid())
-  orderId        String   @unique
-  order          Order    @relation(fields: [orderId], references: [id])
-  status         String   @default("PENDING")
+  id             String    @id @default(cuid())
+  orderId        String    @unique
+  order          Order     @relation(fields: [orderId], references: [id])
+  status         String    @default("PENDING")
   expectedAmount Decimal
   paidAmount     Decimal?
   settledAt      DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }
 
 model Expense {
   id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
   category    String
   amount      Decimal
   expenseDate DateTime
@@ -78,3 +86,4 @@ model Expense {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+EOF
