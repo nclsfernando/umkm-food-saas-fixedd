@@ -1,0 +1,125 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  STAFF
+}
+
+enum Marketplace {
+  GOFOOD
+  GRABFOOD
+  SHOPEEFOOD
+}
+
+enum OrderStatus {
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+enum SettlementStatus {
+  PENDING
+  SETTLED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  businessName String?  @map("business_name")
+  role         Role     @default(STAFF)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  expenses     Expense[]
+
+  @@map("users")
+}
+
+model Category {
+  id       String    @id @default(cuid())
+  name     String    @unique
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id           String      @id @default(cuid())
+  name         String
+  categoryId   String      @map("category_id")
+  sellingPrice Decimal     @map("selling_price") @db.Decimal(15, 2)
+  hpp          Decimal     @db.Decimal(15, 2)
+  isActive     Boolean     @default(true) @map("is_active")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+  category     Category    @relation(fields: [categoryId], references: [id])
+  orderItems   OrderItem[]
+
+  @@map("products")
+}
+
+model Order {
+  id          String      @id @default(cuid())
+  marketplace Marketplace
+  orderId     String      @map("order_id")
+  orderDate   DateTime    @map("order_date")
+  grossSales  Decimal     @map("gross_sales") @db.Decimal(15, 2)
+  discount    Decimal     @default(0) @db.Decimal(15, 2)
+  commission  Decimal     @default(0) @db.Decimal(15, 2)
+  netSales    Decimal     @map("net_sales") @db.Decimal(15, 2)
+  status      OrderStatus @default(COMPLETED)
+  createdAt   DateTime    @default(now()) @map("created_at")
+  items       OrderItem[]
+  settlement  Settlement?
+
+  @@unique([marketplace, orderId])
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String   @map("order_id")
+  productId   String?  @map("product_id")
+  productName String   @map("product_name")
+  qty         Int
+  unitPrice   Decimal  @map("unit_price") @db.Decimal(15, 2)
+  subtotal    Decimal  @db.Decimal(15, 2)
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product? @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+model Settlement {
+  id             String           @id @default(cuid())
+  orderId        String           @unique @map("order_id")
+  expectedAmount Decimal          @map("expected_amount") @db.Decimal(15, 2)
+  settledAmount  Decimal?         @map("settled_amount") @db.Decimal(15, 2)
+  settledAt      DateTime?        @map("settled_at")
+  status         SettlementStatus @default(PENDING)
+  order          Order            @relation(fields: [orderId], references: [id])
+
+  @@map("settlements")
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  description String
+  category    String
+  amount      Decimal  @db.Decimal(15, 2)
+  expenseDate DateTime @map("expense_date")
+  createdAt   DateTime @default(now()) @map("created_at")
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@map("expenses")
+}
