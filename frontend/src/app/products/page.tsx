@@ -1,8 +1,8 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { productsApi } from '@/lib/api';
 import { formatRupiah } from '@/lib/utils';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, Upload } from 'lucide-react';
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<any[]>([]);
@@ -11,6 +11,10 @@ export default function ProductsPage() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState({ name: '', categoryId: '', sellingPrice: '', hpp: '' });
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ created: number; updated: number; skipped: number; errors: string[] } | null>(null);
+  const [importError, setImportError] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -39,6 +43,22 @@ export default function ProductsPage() {
     load();
   };
 
+  const handleImportFile = async (file: File) => {
+    setImporting(true);
+    setImportError('');
+    setImportResult(null);
+    try {
+      const res = await productsApi.import(file);
+      setImportResult(res.data);
+      load();
+    } catch (err: any) {
+      setImportError(err.response?.data?.message || 'Gagal mengimport file.');
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -46,10 +66,61 @@ export default function ProductsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Produk</h1>
           <p className="text-gray-500 text-sm mt-1">{products.length} produk terdaftar</p>
         </div>
-        <button onClick={openAdd} className="btn-primary flex items-center gap-2">
-          <Plus className="w-4 h-4" /> Tambah Produk
-        </button>
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            className="hidden"
+            onChange={(e) => e.target.files?.[0] && handleImportFile(e.target.files[0])}
+          />
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={importing}
+            className="btn-secondary flex items-center gap-2 disabled:opacity-50"
+          >
+            <Upload className="w-4 h-4" /> {importing ? 'Mengimport...' : 'Import Excel/CSV'}
+          </button>
+          <button onClick={openAdd} className="btn-primary flex items-center gap-2">
+            <Plus className="w-4 h-4" /> Tambah Produk
+          </button>
+        </div>
       </div>
+
+      {importError && (
+        <div className="card border-red-200 bg-red-50 text-red-700 text-sm">
+          ❌ {importError}
+        </div>
+      )}
+
+      {importResult && (
+        <div className="card border-green-200 bg-green-50">
+          <p className="font-semibold text-green-800 mb-2">✅ Import selesai</p>
+          <div className="grid grid-cols-3 gap-3 mb-2">
+            <div className="bg-white rounded-lg p-3 text-center">
+              <p className="text-xl font-bold text-green-600">{importResult.created}</p>
+              <p className="text-xs text-gray-500">Produk baru</p>
+            </div>
+            <div className="bg-white rounded-lg p-3 text-center">
+              <p className="text-xl font-bold text-blue-600">{importResult.updated}</p>
+              <p className="text-xs text-gray-500">Diperbarui</p>
+            </div>
+            <div className="bg-white rounded-lg p-3 text-center">
+              <p className="text-xl font-bold text-gray-400">{importResult.skipped}</p>
+              <p className="text-xs text-gray-500">Dilewati</p>
+            </div>
+          </div>
+          {importResult.errors?.length > 0 && (
+            <ul className="text-xs text-amber-700 list-disc list-inside space-y-0.5">
+              {importResult.errors.slice(0, 10).map((e, i) => <li key={i}>{e}</li>)}
+              {importResult.errors.length > 10 && <li>...dan {importResult.errors.length - 10} lainnya</li>}
+            </ul>
+          )}
+          <p className="text-xs text-gray-500 mt-2">
+            Catatan: HPP produk baru di-set 0 secara default. Edit tiap produk untuk mengisi HPP supaya margin terhitung akurat.
+          </p>
+        </div>
+      )}
 
       {showForm && (
         <div className="card border-amber-200 bg-amber-50">

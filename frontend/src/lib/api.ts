@@ -54,6 +54,13 @@ export const productsApi = {
   create: (data: any) => api.post('/products', data),
   update: (id: string, data: any) => api.patch(`/products/${id}`, data),
   delete: (id: string) => api.delete(`/products/${id}`),
+  import: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/products/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
 };
 
 // Expenses
