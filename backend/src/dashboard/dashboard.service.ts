@@ -104,9 +104,9 @@ export class DashboardService {
   private async calculateHpp(from: Date, to: Date) {
     const items = await this.prisma.orderItem.findMany({
       where: { order: { status: 'COMPLETED', orderDate: { gte: from, lte: to } } },
-      include: { product: { select: { hpp: true } } },
+      select: { unitPrice: true, qty: true },
     });
-    return items.reduce((acc, i) => acc + (i.product ? Number(i.product.hpp) * i.qty : 0), 0);
+    return items.reduce((acc, i) => acc + Number(i.unitPrice) * i.qty, 0);
   }
 
   private buildPeriod(agg: any) {

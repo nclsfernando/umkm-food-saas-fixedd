@@ -17,7 +17,7 @@ export class ReportsService {
       this.prisma.expense.findMany({ where: { expenseDate: dateFilter }, select: { category: true, amount: true } }),
       this.prisma.orderItem.findMany({
         where: { order: { status: 'COMPLETED', orderDate: dateFilter } },
-        include: { product: { select: { hpp: true } } },
+        select: { unitPrice: true, qty: true },
       }),
     ]);
 
@@ -25,7 +25,7 @@ export class ReportsService {
     const discount = new Decimal(orderAgg._sum.discount ?? 0);
     const commission = new Decimal(orderAgg._sum.commission ?? 0);
     const netSales = new Decimal(orderAgg._sum.netSales ?? 0);
-    const hpp = items.reduce((acc, i) => acc.plus(i.product ? new Decimal(i.product.hpp).times(i.qty) : 0), new Decimal(0));
+    const hpp = items.reduce((acc, i) => acc.plus(new Decimal(i.unitPrice).times(i.qty)), new Decimal(0));
     const totalExpenses = expenses.reduce((acc, e) => acc.plus(e.amount), new Decimal(0));
     const grossProfit = netSales.minus(hpp);
     const netProfit = grossProfit.minus(totalExpenses);
