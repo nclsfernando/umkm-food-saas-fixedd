@@ -17,7 +17,17 @@ async function bootstrap() {
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
 
   app.enableCors({
-    origin: config.get('FRONTEND_URL') || 'http://localhost:3000',
+    origin: (origin, callback) => {
+      const allowed = [
+        config.get('FRONTEND_URL') || 'http://localhost:3000',
+        'https://umkm-food-saas-fixedd.vercel.app',
+      ];
+      if (!origin || allowed.includes(origin) || origin.endsWith('.vercel.app')) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   });
 
