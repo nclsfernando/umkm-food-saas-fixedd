@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, ShoppingBag, Package, Receipt, FileText, LogOut } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Package, Receipt, FileText, LogOut, Upload } from 'lucide-react';
 import Cookies from 'js-cookie';
 import { cn } from '@/lib/utils';
 
@@ -11,6 +11,7 @@ const nav = [
   { href: '/products', label: 'Produk', icon: Package },
   { href: '/expenses', label: 'Biaya', icon: Receipt },
   { href: '/reports', label: 'Laporan', icon: FileText },
+  { href: '/import', label: 'Import Mutasi', icon: Upload },
 ];
 
 export default function Sidebar() {
