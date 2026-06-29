@@ -67,7 +67,7 @@ export default function ImportPage() {
         </div>
 
         {/* Marketplace badges */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
           {marketplaces.map(m => (
             <div key={m.name} className={`border rounded-xl p-3 ${m.color}`}>
               <div className="text-lg mb-1">{m.icon} {m.name}</div>

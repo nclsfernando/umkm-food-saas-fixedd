@@ -48,17 +48,17 @@ export default function ExpensesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Biaya Operasional</h1>
           <p className="text-gray-500 text-sm mt-1">Total: {formatRupiah(totalAmount)}</p>
         </div>
-        <button onClick={openAdd} className="btn-primary flex items-center gap-2">
+        <button onClick={openAdd} className="btn-primary flex items-center gap-2 self-start sm:self-auto">
           <Plus className="w-4 h-4" /> Tambah Biaya
         </button>
       </div>
 
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-3">
         <input type="date" className="input w-auto" value={from} onChange={e => setFrom(e.target.value)} />
         <input type="date" className="input w-auto" value={to} onChange={e => setTo(e.target.value)} />
         <button onClick={load} className="btn-primary">Tampilkan</button>
