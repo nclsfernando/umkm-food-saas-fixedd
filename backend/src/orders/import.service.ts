@@ -74,7 +74,15 @@ export class ImportService {
       const commission = biayaJasa + biayaSukses + mdr;
       const netSales = parseFloat(String(row['Total'] || '0').replace(/,/g, '')) || (jumlah - commission);
 
-      const itemName = [jenis, metodePembayaran, idPesanan || idTransaksi].filter(Boolean).join(' - ');
+      // Encode semua detail ke productName sebagai JSON string
+      const itemMeta = JSON.stringify({
+        jenis,
+        metode: metodePembayaran,
+        idPesanan: idPesanan || idTransaksi,
+        biayaJasa,
+        biayaSukses,
+        mdr,
+      });
 
       orders.push({
         orderDate: this.parseDate(row['Tanggal dibuat'] || row['Diperbarui Pada'] || ''),
@@ -84,7 +92,7 @@ export class ImportService {
         commission,
         netSales: netSales > 0 ? netSales : jumlah - commission,
         status: 'COMPLETED',
-        items: [{ productName: itemName || 'GrabFood Order', qty: 1, unitPrice: jumlah, subtotal: jumlah }],
+        items: [{ productName: itemMeta, qty: 1, unitPrice: jumlah, subtotal: jumlah }],
       });
     }
     return orders;

@@ -39,16 +39,24 @@ export default function OrdersPage() {
   const search = () => { setPage(1); load(); };
   const totalPages = Math.ceil(total / limit);
 
-  // Parse item name untuk ambil detail jenis/metode/id
-  const parseItemName = (items: any[]) => {
-    if (!items || items.length === 0) return { jenis: '-', metode: '-', idPesanan: '-' };
+  const parseItemMeta = (items: any[]) => {
+    if (!items || items.length === 0) return { jenis: '-', metode: '-', idPesanan: '-', biayaJasa: 0, biayaSukses: 0, mdr: 0 };
     const name = items[0]?.productName || '';
-    const parts = name.split(' - ');
-    return {
-      jenis: parts[0] || '-',
-      metode: parts[1] || '-',
-      idPesanan: parts[2] || '-',
-    };
+    try {
+      const meta = JSON.parse(name);
+      return {
+        jenis: meta.jenis || '-',
+        metode: meta.metode || '-',
+        idPesanan: meta.idPesanan || '-',
+        biayaJasa: meta.biayaJasa || 0,
+        biayaSukses: meta.biayaSukses || 0,
+        mdr: meta.mdr || 0,
+      };
+    } catch {
+      // Format lama: "GrabFood - Nontunai - GF-495"
+      const parts = name.split(' - ');
+      return { jenis: parts[0] || '-', metode: parts[1] || '-', idPesanan: parts[2] || '-', biayaJasa: 0, biayaSukses: 0, mdr: 0 };
+    }
   };
 
   return (
@@ -97,9 +105,7 @@ export default function OrdersPage() {
                 {orders.length === 0 ? (
                   <tr><td colSpan={10} className="text-center py-12 text-gray-400">Belum ada data</td></tr>
                 ) : orders.map(o => {
-                  const { jenis, metode, idPesanan } = parseItemName(o.items);
-                  // Estimasi breakdown komisi dari total commission
-                  const totalComm = Number(o.commission);
+                  const { jenis, metode, idPesanan, biayaJasa, biayaSukses, mdr } = parseItemMeta(o.items);
                   return (
                     <tr key={o.id} className="border-b border-gray-50 hover:bg-gray-50">
                       <td className="py-2.5 pr-3 pl-4 md:pl-0 text-gray-600 whitespace-nowrap">{formatDate(o.orderDate)}</td>
@@ -110,11 +116,11 @@ export default function OrdersPage() {
                       </td>
                       <td className="py-2.5 pr-3 text-gray-700 whitespace-nowrap">{jenis}</td>
                       <td className="py-2.5 pr-3 text-gray-500 whitespace-nowrap">{metode}</td>
-                      <td className="py-2.5 pr-3 font-mono text-gray-400 whitespace-nowrap">{idPesanan !== '-' ? idPesanan : ''}</td>
+                      <td className="py-2.5 pr-3 font-mono text-gray-400 whitespace-nowrap">{idPesanan !== '-' ? idPesanan : '-'}</td>
                       <td className="py-2.5 pr-3 text-right font-medium">{formatRupiah(Number(o.grossSales))}</td>
-                      <td className="py-2.5 pr-3 text-right text-red-500">{totalComm > 0 ? `-${formatRupiah(totalComm)}` : '-'}</td>
-                      <td className="py-2.5 pr-3 text-right text-orange-400">-</td>
-                      <td className="py-2.5 pr-3 text-right text-orange-400">-</td>
+                      <td className="py-2.5 pr-3 text-right text-red-500">{biayaJasa > 0 ? `-${formatRupiah(biayaJasa)}` : '-'}</td>
+                      <td className="py-2.5 pr-3 text-right text-orange-500">{biayaSukses > 0 ? `-${formatRupiah(biayaSukses)}` : '-'}</td>
+                      <td className="py-2.5 pr-3 text-right text-orange-400">{mdr > 0 ? `-${formatRupiah(mdr)}` : '-'}</td>
                       <td className="py-2.5 text-right font-semibold text-green-700">{formatRupiah(Number(o.netSales))}</td>
                     </tr>
                   );
