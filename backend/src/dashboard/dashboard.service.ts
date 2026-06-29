@@ -58,13 +58,13 @@ export class DashboardService {
     const from = dayjs(`${year}-${month}-01`).startOf('month').toDate();
     const to = dayjs(`${year}-${month}-01`).endOf('month').toDate();
     const rows = await this.prisma.$queryRaw<any[]>`
-      SELECT DATE(order_date) as day,
-        SUM(gross_sales)::float as gross_sales,
-        SUM(net_sales)::float as net_sales,
+      SELECT DATE("orderDate") as day,
+        SUM("grossSales")::float as gross_sales,
+        SUM("netSales")::float as net_sales,
         COUNT(id) as orders
-      FROM orders
-      WHERE status = 'COMPLETED' AND order_date >= ${from} AND order_date <= ${to}
-      GROUP BY DATE(order_date) ORDER BY day ASC`;
+      FROM "Order"
+      WHERE status = 'COMPLETED' AND "orderDate" >= ${from} AND "orderDate" <= ${to}
+      GROUP BY DATE("orderDate") ORDER BY day ASC`;
     return rows;
   }
 
@@ -83,15 +83,15 @@ export class DashboardService {
     const toDate = to ? new Date(to) : new Date('2099-12-31');
     const rows = await this.prisma.$queryRaw<any[]>`
       SELECT 
-        DATE(order_date) as tanggal,
+        DATE("orderDate") as tanggal,
         marketplace,
         COUNT(id)::int as orders,
-        SUM(gross_sales)::float as gross_sales,
+        SUM("grossSales")::float as gross_sales,
         SUM(commission)::float as commission,
-        SUM(net_sales)::float as net_sales
-      FROM orders
-      WHERE status = 'COMPLETED' AND order_date >= ${fromDate} AND order_date <= ${toDate}
-      GROUP BY DATE(order_date), marketplace
+        SUM("netSales")::float as net_sales
+      FROM "Order"
+      WHERE status = 'COMPLETED' AND "orderDate" >= ${fromDate} AND "orderDate" <= ${toDate}
+      GROUP BY DATE("orderDate"), marketplace
       ORDER BY tanggal DESC, marketplace ASC`;
     return this.pivotByMarketplace(rows, 'tanggal');
   }
@@ -101,15 +101,15 @@ export class DashboardService {
     const to = new Date(`${year}-12-31T23:59:59`);
     const rows = await this.prisma.$queryRaw<any[]>`
       SELECT 
-        TO_CHAR(order_date, 'YYYY-MM') as bulan,
+        TO_CHAR("orderDate", 'YYYY-MM') as bulan,
         marketplace,
         COUNT(id)::int as orders,
-        SUM(gross_sales)::float as gross_sales,
+        SUM("grossSales")::float as gross_sales,
         SUM(commission)::float as commission,
-        SUM(net_sales)::float as net_sales
-      FROM orders
-      WHERE status = 'COMPLETED' AND order_date >= ${from} AND order_date <= ${to}
-      GROUP BY TO_CHAR(order_date, 'YYYY-MM'), marketplace
+        SUM("netSales")::float as net_sales
+      FROM "Order"
+      WHERE status = 'COMPLETED' AND "orderDate" >= ${from} AND "orderDate" <= ${to}
+      GROUP BY TO_CHAR("orderDate", 'YYYY-MM'), marketplace
       ORDER BY bulan DESC, marketplace ASC`;
     return this.pivotByMarketplace(rows, 'bulan');
   }
