@@ -88,7 +88,7 @@ export class ImportService {
 
       orders.push({
         orderDate: this.parseDate(row['Tanggal dibuat'] || row['Diperbarui Pada'] || ''),
-        marketplace: 'GrabFood',
+        marketplace: 'GRABFOOD',
         grossSales: jumlah,
         discount: 0,
         commission,
@@ -142,7 +142,7 @@ export class ImportService {
 
       orders.push({
         orderDate: this.parseDate(row['Waktu transaksi'] || row['Tanggal'] || row['Order Date'] || ''),
-        marketplace: 'GoFood',
+        marketplace: 'GOFOOD',
         grossSales,
         discount: 0,
         commission: totalBiaya,
@@ -189,7 +189,7 @@ export class ImportService {
 
       orders.push({
         orderDate: new Date(tanggal),
-        marketplace: 'ShopeeFood',
+        marketplace: 'SHOPEEFOOD',
         grossSales,
         discount,
         commission,
@@ -223,7 +223,7 @@ export class ImportService {
 
       orders.push({
         orderDate: new Date(row['Tanggal dibuat'] || row['Date'] || new Date()),
-        marketplace: 'GrabFood',
+        marketplace: 'GRABFOOD',
         grossSales,
         discount: 0,
         commission: Math.abs(parseFloat(row['Biaya jasa'] || 0)),
