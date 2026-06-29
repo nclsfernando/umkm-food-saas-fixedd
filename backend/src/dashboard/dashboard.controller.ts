@@ -27,7 +27,17 @@ export class DashboardController {
     @Query('month', new DefaultValuePipe(new Date().getMonth() + 1), ParseIntPipe) month: number,
   ) { return this.dashboard.getDailyChart(year, month); }
 
-  @Get('top-products')
+  @Get('report/daily')
+  @ApiOperation({ summary: 'Laporan per tanggal per marketplace' })
+  reportDaily(@Query('from') from: string, @Query('to') to: string) {
+    return this.dashboard.getReportByDate(from, to);
+  }
+
+  @Get('report/monthly')
+  @ApiOperation({ summary: 'Laporan per bulan per marketplace' })
+  reportMonthly(@Query('year') year: string) {
+    return this.dashboard.getReportByMonth(year ? parseInt(year) : new Date().getFullYear());
+  }
   @ApiOperation({ summary: 'Produk terlaris' })
   topProducts(
     @Query('from') from: string,

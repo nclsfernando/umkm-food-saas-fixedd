@@ -78,7 +78,66 @@ export class DashboardService {
     });
   }
 
-  private async aggregateOrders(from: Date, to: Date) {
+  async getReportByDate(from: string, to: string) {
+    const fromDate = from ? new Date(from) : new Date('2000-01-01');
+    const toDate = to ? new Date(to) : new Date('2099-12-31');
+    const rows = await this.prisma.$queryRaw<any[]>`
+      SELECT 
+        DATE(order_date) as tanggal,
+        marketplace,
+        COUNT(id)::int as orders,
+        SUM(gross_sales)::float as gross_sales,
+        SUM(commission)::float as commission,
+        SUM(net_sales)::float as net_sales
+      FROM orders
+      WHERE status = 'COMPLETED' AND order_date >= ${fromDate} AND order_date <= ${toDate}
+      GROUP BY DATE(order_date), marketplace
+      ORDER BY tanggal DESC, marketplace ASC`;
+    return this.pivotByMarketplace(rows, 'tanggal');
+  }
+
+  async getReportByMonth(year: number) {
+    const from = new Date(`${year}-01-01`);
+    const to = new Date(`${year}-12-31T23:59:59`);
+    const rows = await this.prisma.$queryRaw<any[]>`
+      SELECT 
+        TO_CHAR(order_date, 'YYYY-MM') as bulan,
+        marketplace,
+        COUNT(id)::int as orders,
+        SUM(gross_sales)::float as gross_sales,
+        SUM(commission)::float as commission,
+        SUM(net_sales)::float as net_sales
+      FROM orders
+      WHERE status = 'COMPLETED' AND order_date >= ${from} AND order_date <= ${to}
+      GROUP BY TO_CHAR(order_date, 'YYYY-MM'), marketplace
+      ORDER BY bulan DESC, marketplace ASC`;
+    return this.pivotByMarketplace(rows, 'bulan');
+  }
+
+  private pivotByMarketplace(rows: any[], dateKey: string) {
+    const map: Record<string, any> = {};
+    const marketplaces = ['GrabFood', 'GoFood', 'ShopeeFood'];
+
+    for (const row of rows) {
+      const key = row[dateKey];
+      if (!map[key]) {
+        map[key] = { [dateKey]: key, total: { orders: 0, grossSales: 0, commission: 0, netSales: 0 } };
+        for (const mp of marketplaces) map[key][mp] = { orders: 0, grossSales: 0, commission: 0, netSales: 0 };
+      }
+      const mp = row.marketplace;
+      if (map[key][mp]) {
+        map[key][mp].orders += row.orders;
+        map[key][mp].grossSales += row.gross_sales;
+        map[key][mp].commission += row.commission;
+        map[key][mp].netSales += row.net_sales;
+      }
+      map[key].total.orders += row.orders;
+      map[key].total.grossSales += row.gross_sales;
+      map[key].total.commission += row.commission;
+      map[key].total.netSales += row.net_sales;
+    }
+    return Object.values(map);
+  }
     const agg = await this.prisma.order.aggregate({
       where: { status: 'COMPLETED', orderDate: { gte: from, lte: to } },
       _count: { id: true },
