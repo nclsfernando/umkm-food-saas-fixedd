@@ -7,9 +7,9 @@ type ViewMode = 'daily' | 'monthly';
 
 const MP = ['GrabFood', 'GoFood', 'ShopeeFood'];
 const MP_COLOR: Record<string, string> = {
-  GrabFood: 'text-green-700',
-  GoFood: 'text-red-600',
-  ShopeeFood: 'text-orange-500',
+  GrabFood: 'text-green-700 font-medium',
+  GoFood: 'text-red-600 font-medium',
+  ShopeeFood: 'text-orange-500 font-medium',
 };
 
 function fmt(v: number) { return v > 0 ? formatRupiah(v) : '-'; }
@@ -35,16 +35,11 @@ export default function LaporanPage() {
 
   useEffect(() => { load(); }, [mode]);
 
-  const totals = data.reduce((acc, row) => {
-    for (const mp of [...MP, 'total']) {
-      if (!acc[mp]) acc[mp] = { orders: 0, grossSales: 0, commission: 0, netSales: 0 };
-      acc[mp].orders += row[mp]?.orders || 0;
-      acc[mp].grossSales += row[mp]?.grossSales || 0;
-      acc[mp].commission += row[mp]?.commission || 0;
-      acc[mp].netSales += row[mp]?.netSales || 0;
-    }
-    return acc;
-  }, {} as Record<string, any>);
+  const grandTotal = data.reduce((acc, row) => acc + (row.total?.netSales || 0), 0);
+  const grandTotalByMp: Record<string, number> = {};
+  MP.forEach(mp => {
+    grandTotalByMp[mp] = data.reduce((acc, row) => acc + (row[mp]?.netSales || 0), 0);
+  });
 
   const dateLabel = (row: any) => {
     if (mode === 'daily') {
@@ -59,7 +54,7 @@ export default function LaporanPage() {
     <div className="space-y-4 md:space-y-6">
       <div>
         <h1 className="text-xl md:text-2xl font-bold text-gray-900">Laporan Marketplace</h1>
-        <p className="text-gray-500 text-sm mt-0.5">Ringkasan penjualan per platform</p>
+        <p className="text-gray-500 text-sm mt-0.5">Net cair per merchant per {mode === 'daily' ? 'tanggal' : 'bulan'}</p>
       </div>
 
       {/* Toggle */}
@@ -101,63 +96,69 @@ export default function LaporanPage() {
       </div>
 
       {/* Table */}
-      <div className="card overflow-hidden">
+      <div className="card overflow-hidden p-0">
         {loading ? (
-          <div className="text-center py-12 text-gray-400">Memuat...</div>
+          <div className="text-center py-12 text-gray-400 p-6">Memuat...</div>
         ) : (
-          <div className="overflow-x-auto -mx-4 md:mx-0">
-            <table className="w-full text-xs md:text-sm min-w-[900px]">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
               <thead>
-                <tr className="border-b-2 border-gray-200 bg-gray-50">
-                  <th className="py-3 px-4 text-left text-gray-600 font-semibold" rowSpan={2}>
+                <tr className="bg-gray-50 border-b-2 border-gray-200">
+                  <th className="py-3 px-4 text-left text-gray-600 font-semibold w-32">
                     {mode === 'daily' ? 'Tanggal' : 'Bulan'}
                   </th>
-                  {MP.map(mp => (
-                    <th key={mp} colSpan={3} className={`py-3 px-2 text-center font-semibold border-l border-gray-200 ${MP_COLOR[mp]}`}>
-                      {mp}
-                    </th>
-                  ))}
-                  <th colSpan={3} className="py-3 px-2 text-center font-semibold border-l border-gray-200 text-gray-700">
-                    Total
-                  </th>
-                </tr>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  {[...MP, 'Total'].map(mp => (
-                    <>
-                      <th key={`${mp}-gross`} className="py-2 px-2 text-right text-gray-400 font-normal border-l border-gray-100">Gross</th>
-                      <th key={`${mp}-comm`} className="py-2 px-2 text-right text-gray-400 font-normal">Biaya</th>
-                      <th key={`${mp}-net`} className="py-2 px-2 text-right text-gray-400 font-normal">Net</th>
-                    </>
-                  ))}
+                  <th className="py-3 px-4 text-left text-gray-600 font-semibold">Merchant</th>
+                  <th className="py-3 px-4 text-right text-gray-600 font-semibold">Net Cair</th>
+                  <th className="py-3 px-4 text-right text-gray-600 font-semibold bg-amber-50">Total / {mode === 'daily' ? 'Tgl' : 'Bulan'}</th>
                 </tr>
               </thead>
               <tbody>
                 {data.length === 0 ? (
-                  <tr><td colSpan={13} className="text-center py-12 text-gray-400">Belum ada data</td></tr>
+                  <tr><td colSpan={4} className="text-center py-12 text-gray-400">Belum ada data</td></tr>
                 ) : data.map((row, i) => (
-                  <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="py-2.5 px-4 font-medium text-gray-700 whitespace-nowrap">{dateLabel(row)}</td>
-                    {[...MP, 'total'].map(mp => (
-                      <>
-                        <td key={`${mp}-g`} className="py-2.5 px-2 text-right border-l border-gray-100 text-gray-600">{fmt(row[mp]?.grossSales || 0)}</td>
-                        <td key={`${mp}-c`} className="py-2.5 px-2 text-right text-red-400">{row[mp]?.commission > 0 ? `-${formatRupiah(row[mp].commission)}` : '-'}</td>
-                        <td key={`${mp}-n`} className="py-2.5 px-2 text-right font-semibold text-green-700">{fmt(row[mp]?.netSales || 0)}</td>
-                      </>
-                    ))}
-                  </tr>
+                  MP.map((mp, j) => (
+                    <tr key={`${i}-${j}`} className={`border-b border-gray-50 hover:bg-gray-50 ${j === 0 && i > 0 ? 'border-t border-gray-200' : ''}`}>
+                      {/* TGL hanya di baris pertama tiap grup */}
+                      {j === 0 ? (
+                        <td rowSpan={3} className="py-2.5 px-4 align-top font-medium text-gray-700 whitespace-nowrap border-r border-gray-100 bg-gray-50/50">
+                          {dateLabel(row)}
+                        </td>
+                      ) : null}
+                      <td className={`py-2.5 px-4 ${MP_COLOR[mp]}`}>{mp}</td>
+                      <td className="py-2.5 px-4 text-right text-gray-700">
+                        {fmt(row[mp]?.netSales || 0)}
+                      </td>
+                      {/* Total hanya di baris pertama tiap grup */}
+                      {j === 0 ? (
+                        <td rowSpan={3} className="py-2.5 px-4 text-right font-bold text-gray-900 align-middle bg-amber-50/50 border-l border-amber-100">
+                          {fmt(row.total?.netSales || 0)}
+                        </td>
+                      ) : null}
+                    </tr>
+                  ))
                 ))}
               </tbody>
               {data.length > 0 && (
                 <tfoot>
-                  <tr className="border-t-2 border-gray-300 bg-amber-50 font-semibold">
-                    <td className="py-3 px-4 text-gray-700">Grand Total</td>
-                    {[...MP, 'total'].map(mp => (
-                      <>
-                        <td key={`${mp}-g`} className="py-3 px-2 text-right border-l border-gray-200 text-gray-700">{fmt(totals[mp]?.grossSales || 0)}</td>
-                        <td key={`${mp}-c`} className="py-3 px-2 text-right text-red-500">{totals[mp]?.commission > 0 ? `-${formatRupiah(totals[mp].commission)}` : '-'}</td>
-                        <td key={`${mp}-n`} className="py-3 px-2 text-right text-green-700">{fmt(totals[mp]?.netSales || 0)}</td>
-                      </>
-                    ))}
+                  <tr className="border-t-2 border-gray-300 bg-amber-50">
+                    <td className="py-3 px-4 font-bold text-gray-900">TOTAL</td>
+                    <td className="py-3 px-4">
+                      <div className="space-y-0.5">
+                        {MP.map(mp => (
+                          <div key={mp} className={`text-xs ${MP_COLOR[mp]}`}>
+                            {mp}: {fmt(grandTotalByMp[mp])}
+                          </div>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-right font-bold text-gray-900">
+                      {MP.map(mp => (
+                        <div key={mp} className="text-xs text-gray-600">{fmt(grandTotalByMp[mp])}</div>
+                      ))}
+                    </td>
+                    <td className="py-3 px-4 text-right font-bold text-lg text-amber-600 bg-amber-100 border-l border-amber-200">
+                      {fmt(grandTotal)}
+                    </td>
                   </tr>
                 </tfoot>
               )}
