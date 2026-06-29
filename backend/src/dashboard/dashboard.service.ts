@@ -138,6 +138,8 @@ export class DashboardService {
     }
     return Object.values(map);
   }
+
+  private async aggregateOrders(from: Date, to: Date) {
     const agg = await this.prisma.order.aggregate({
       where: { status: 'COMPLETED', orderDate: { gte: from, lte: to } },
       _count: { id: true },
