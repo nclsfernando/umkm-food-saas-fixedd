@@ -232,4 +232,15 @@ export class ImportService {
     }
     return orders;
   }
+
+  private parseDate(raw: any): Date {
+    if (!raw) return new Date();
+    if (raw instanceof Date) return raw;
+    const str = String(raw).trim();
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) return d;
+    const match = str.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+    if (match) return new Date(`${match[3]}-${match[2].padStart(2,'0')}-${match[1].padStart(2,'0')}`);
+    return new Date();
+  }
 }
