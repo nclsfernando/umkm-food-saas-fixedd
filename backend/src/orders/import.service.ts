@@ -82,6 +82,8 @@ export class ImportService {
         biayaJasa,
         biayaSukses,
         mdr,
+        tanggalTransfer,
+        idPencairan,
       });
 
       orders.push({

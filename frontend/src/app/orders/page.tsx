@@ -40,7 +40,7 @@ export default function OrdersPage() {
   const totalPages = Math.ceil(total / limit);
 
   const parseItemMeta = (items: any[]) => {
-    if (!items || items.length === 0) return { jenis: '-', metode: '-', idPesanan: '-', biayaJasa: 0, biayaSukses: 0, mdr: 0 };
+    if (!items || items.length === 0) return { jenis: '-', metode: '-', idPesanan: '-', biayaJasa: 0, biayaSukses: 0, mdr: 0, tanggalTransfer: '-', idPencairan: '-' };
     const name = items[0]?.productName || '';
     try {
       const meta = JSON.parse(name);
@@ -51,11 +51,12 @@ export default function OrdersPage() {
         biayaJasa: meta.biayaJasa || 0,
         biayaSukses: meta.biayaSukses || 0,
         mdr: meta.mdr || 0,
+        tanggalTransfer: meta.tanggalTransfer || '-',
+        idPencairan: meta.idPencairan || '-',
       };
     } catch {
-      // Format lama: "GrabFood - Nontunai - GF-495"
       const parts = name.split(' - ');
-      return { jenis: parts[0] || '-', metode: parts[1] || '-', idPesanan: parts[2] || '-', biayaJasa: 0, biayaSukses: 0, mdr: 0 };
+      return { jenis: parts[0] || '-', metode: parts[1] || '-', idPesanan: parts[2] || '-', biayaJasa: 0, biayaSukses: 0, mdr: 0, tanggalTransfer: '-', idPencairan: '-' };
     }
   };
 
@@ -98,14 +99,16 @@ export default function OrdersPage() {
                   <th className="pb-3 pr-3 text-right">Biaya Jasa</th>
                   <th className="pb-3 pr-3 text-right">Biaya Sukses</th>
                   <th className="pb-3 pr-3 text-right">MDR</th>
-                  <th className="pb-3 text-right">Net Cair</th>
+                  <th className="pb-3 pr-3 text-right">Net Cair</th>
+                  <th className="pb-3 pr-3 whitespace-nowrap">Tgl Transfer</th>
+                  <th className="pb-3">ID Pencairan</th>
                 </tr>
               </thead>
               <tbody>
                 {orders.length === 0 ? (
                   <tr><td colSpan={10} className="text-center py-12 text-gray-400">Belum ada data</td></tr>
                 ) : orders.map(o => {
-                  const { jenis, metode, idPesanan, biayaJasa, biayaSukses, mdr } = parseItemMeta(o.items);
+                  const { jenis, metode, idPesanan, biayaJasa, biayaSukses, mdr, tanggalTransfer, idPencairan } = parseItemMeta(o.items);
                   return (
                     <tr key={o.id} className="border-b border-gray-50 hover:bg-gray-50">
                       <td className="py-2.5 pr-3 pl-4 md:pl-0 text-gray-600 whitespace-nowrap">{formatDate(o.orderDate)}</td>
@@ -121,7 +124,9 @@ export default function OrdersPage() {
                       <td className="py-2.5 pr-3 text-right text-red-500">{biayaJasa > 0 ? `-${formatRupiah(biayaJasa)}` : '-'}</td>
                       <td className="py-2.5 pr-3 text-right text-orange-500">{biayaSukses > 0 ? `-${formatRupiah(biayaSukses)}` : '-'}</td>
                       <td className="py-2.5 pr-3 text-right text-orange-400">{mdr > 0 ? `-${formatRupiah(mdr)}` : '-'}</td>
-                      <td className="py-2.5 text-right font-semibold text-green-700">{formatRupiah(Number(o.netSales))}</td>
+                      <td className="py-2.5 pr-3 text-right font-semibold text-green-700">{formatRupiah(Number(o.netSales))}</td>
+                      <td className="py-2.5 pr-3 text-gray-400 whitespace-nowrap text-xs" title="Tanggal dana cair ke rekening">{tanggalTransfer !== '-' ? tanggalTransfer : '-'}</td>
+                      <td className="py-2.5 font-mono text-gray-400 text-xs whitespace-nowrap">{idPencairan !== '-' ? idPencairan : '-'}</td>
                     </tr>
                   );
                 })}
@@ -131,10 +136,11 @@ export default function OrdersPage() {
                   <tr className="border-t-2 border-gray-200 bg-gray-50 font-semibold">
                     <td colSpan={5} className="py-3 pl-4 md:pl-0 text-sm text-gray-600">Total ({orders.length} transaksi)</td>
                     <td className="py-3 pr-3 text-right text-sm">{formatRupiah(orders.reduce((a, o) => a + Number(o.grossSales), 0))}</td>
-                    <td className="py-3 pr-3 text-right text-sm text-red-500">-{formatRupiah(orders.reduce((a, o) => a + Number(o.commission), 0))}</td>
-                    <td className="py-3 pr-3 text-right text-sm">-</td>
-                    <td className="py-3 pr-3 text-right text-sm">-</td>
-                    <td className="py-3 text-right text-sm text-green-700">{formatRupiah(orders.reduce((a, o) => a + Number(o.netSales), 0))}</td>
+                    <td className="py-3 pr-3 text-right text-sm text-red-500">-{formatRupiah(orders.reduce((a, o) => a + (parseItemMeta(o.items).biayaJasa), 0))}</td>
+                    <td className="py-3 pr-3 text-right text-sm text-orange-500">-{formatRupiah(orders.reduce((a, o) => a + (parseItemMeta(o.items).biayaSukses), 0))}</td>
+                    <td className="py-3 pr-3 text-right text-sm text-orange-400">-{formatRupiah(orders.reduce((a, o) => a + (parseItemMeta(o.items).mdr), 0))}</td>
+                    <td className="py-3 pr-3 text-right text-sm text-green-700">{formatRupiah(orders.reduce((a, o) => a + Number(o.netSales), 0))}</td>
+                    <td colSpan={2} />
                   </tr>
                 </tfoot>
               )}
