@@ -10,9 +10,9 @@ export class DashboardService {
   async getSummary() {
     const today = dayjs().startOf('day').toDate();
     const todayEnd = dayjs().endOf('day').toDate();
-    const weekStart = dayjs().startOf('week').toDate();
-    const monthStart = dayjs().startOf('month').toDate();
-    const monthEnd = dayjs().endOf('month').toDate();
+    const weekStart = dayjs().subtract(6, 'day').startOf('day').toDate();
+    const monthStart = dayjs().subtract(29, 'day').startOf('day').toDate();
+    const monthEnd = todayEnd;
 
     const [todayOrders, weekOrders, monthOrders, monthExpenses, pendingSettlement] = await Promise.all([
       this.aggregateOrders(today, todayEnd),

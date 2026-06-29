@@ -14,8 +14,12 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const { from, to } = thisMonthRange();
     const now = new Date();
+    const to = now.toISOString().split('T')[0];
+    const fromDate = new Date(now);
+    fromDate.setDate(fromDate.getDate() - 29);
+    const from = fromDate.toISOString().split('T')[0];
+
     Promise.all([
       dashboardApi.summary(),
       dashboardApi.dailyChart(now.getFullYear(), now.getMonth() + 1),
@@ -30,9 +34,9 @@ export default function DashboardPage() {
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500" /></div>;
 
   const stats = [
-    { label: 'Net Sales Bulan Ini', value: formatRupiah(summary?.month?.netSales ?? 0), icon: TrendingUp, color: 'text-green-600 bg-green-50' },
-    { label: 'Order Bulan Ini', value: summary?.month?.orders ?? 0, icon: ShoppingBag, color: 'text-blue-600 bg-blue-50' },
-    { label: 'Laba Bersih Bulan Ini', value: formatRupiah(summary?.month?.netProfit ?? 0), icon: Wallet, color: 'text-amber-600 bg-amber-50' },
+    { label: 'Net Sales 30 Hari', value: formatRupiah(summary?.month?.netSales ?? 0), icon: TrendingUp, color: 'text-green-600 bg-green-50' },
+    { label: 'Order 30 Hari', value: summary?.month?.orders ?? 0, icon: ShoppingBag, color: 'text-blue-600 bg-blue-50' },
+    { label: 'Laba Bersih 30 Hari', value: formatRupiah(summary?.month?.netProfit ?? 0), icon: Wallet, color: 'text-amber-600 bg-amber-50' },
     { label: 'Settlement Pending', value: formatRupiah(Number(summary?.pendingSettlement ?? 0)), icon: Clock, color: 'text-red-600 bg-red-50' },
   ];
 
