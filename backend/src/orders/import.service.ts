@@ -101,8 +101,10 @@ export class ImportService {
   }
 
   private parseGoFoodXlsx(wb: XLSX.WorkBook) {
-    // GoFood/GoBiz: Try common sheet names
+    // GoFood/GoBiz: Sheet "Midtrans Payments" atau sheet lain
     const sheetName = wb.SheetNames.find(s =>
+      s.toLowerCase().includes('midtrans') ||
+      s.toLowerCase().includes('payment') ||
       s.toLowerCase().includes('order') ||
       s.toLowerCase().includes('rekap') ||
       s.toLowerCase().includes('transaksi')
@@ -113,37 +115,40 @@ export class ImportService {
     const orders: any[] = [];
 
     for (const row of raw) {
-      // GoFood column names
-      const grossSales = parseFloat(
-        row['Harga Menu'] || row['Subtotal'] || row['Total Harga'] ||
-        row['Nilai Pesanan'] || row['Gross Amount'] || 0
-      );
-      if (!grossSales) continue;
+      const grossSales = parseFloat(String(
+        row['Penjualan'] || row['Harga Menu'] || row['Subtotal'] ||
+        row['Total Harga'] || row['Nilai Pesanan'] || row['Gross Amount'] || '0'
+      ).replace(/,/g, '')) || 0;
+      if (grossSales <= 0) continue;
 
-      const commission = Math.abs(parseFloat(
-        row['Komisi'] || row['Commission'] || row['Biaya Platform'] || 0
-      ));
-      const discount = Math.abs(parseFloat(
-        row['Diskon'] || row['Discount'] || 0
-      ));
+      const biayaGoFood = Math.abs(parseFloat(String(row['Biaya GoFood'] || row['Komisi'] || row['Commission'] || '0').replace(/,/g, '')) || 0);
+      const biayaProgram = Math.abs(parseFloat(String(row['Biaya Program'] || '0').replace(/,/g, '')) || 0);
+      const totalBiaya = Math.abs(parseFloat(String(row['Total Biaya'] || '0').replace(/,/g, '')) || (biayaGoFood + biayaProgram));
+      const pendapatanBersih = parseFloat(String(row['Pendapatan Bersih'] || '0').replace(/,/g, '')) || (grossSales - totalBiaya);
+      const nomorPesanan = String(row['Nomor pesanan'] || row['No. Pesanan'] || row['Order ID'] || '').replace(/^'/, '').trim();
+      const namaProgram = String(row['Nama Program'] || '').trim();
+      const merchantId = String(row['Merchant ID'] || '').trim();
 
-      const tanggal = row['Tanggal'] || row['Waktu Pesanan'] || row['Order Date'] || row['Tanggal Pesanan'] || new Date().toISOString();
-      const orderId = row['No. Pesanan'] || row['Order ID'] || row['ID Pesanan'] || '';
+      const itemMeta = JSON.stringify({
+        jenis: 'GoFood',
+        metode: namaProgram || 'GoPay',
+        idPesanan: nomorPesanan,
+        biayaJasa: biayaGoFood,
+        biayaSukses: biayaProgram,
+        mdr: 0,
+        tanggalTransfer: '',
+        idPencairan: merchantId,
+      });
 
       orders.push({
-        orderDate: new Date(tanggal),
+        orderDate: this.parseDate(row['Waktu transaksi'] || row['Tanggal'] || row['Order Date'] || ''),
         marketplace: 'GoFood',
         grossSales,
-        discount,
-        commission,
-        netSales: grossSales - discount - commission,
+        discount: 0,
+        commission: totalBiaya,
+        netSales: pendapatanBersih > 0 ? pendapatanBersih : grossSales - totalBiaya,
         status: 'COMPLETED',
-        items: [{
-          productName: `GoFood Order ${orderId}`,
-          qty: 1,
-          unitPrice: grossSales,
-          subtotal: grossSales,
-        }],
+        items: [{ productName: itemMeta, qty: 1, unitPrice: grossSales, subtotal: grossSales }],
       });
     }
     return orders;
