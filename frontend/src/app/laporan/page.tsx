@@ -117,19 +117,60 @@ export default function LaporanPage() {
               <tbody>
                 {data.length === 0 ? (
                   <tr><td colSpan={5} className="text-center py-12 text-gray-400">Belum ada data</td></tr>
-                ) : data.map((row, i) => (
-                  <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="py-2.5 px-4 font-medium text-gray-700 whitespace-nowrap">{dateLabel(row)}</td>
-                    {MP.map(mp => (
-                      <td key={mp} className={`py-2.5 px-3 text-right ${row[mp]?.netSales > 0 ? MP_COLOR[mp] : 'text-gray-300'}`}>
-                        {fmt(row[mp]?.netSales || 0)}
-                      </td>
-                    ))}
-                    <td className="py-2.5 px-4 text-right font-bold text-gray-900 bg-amber-50/50">
-                      {fmt(row.total?.netSales || 0)}
-                    </td>
-                  </tr>
-                ))}
+                ) : (() => {
+                  const rows: any[] = [];
+                  let currentMonth = '';
+                  let monthTotals: Record<string, number> = { GrabFood: 0, GoFood: 0, ShopeeFood: 0, total: 0 };
+                  let monthLabel = '';
+
+                  const flushMonth = () => {
+                    if (!monthLabel) return;
+                    rows.push(
+                      <tr key={`month-${monthLabel}`} className="border-b-2 border-amber-200 bg-amber-50 font-semibold text-xs">
+                        <td className="py-2 px-4 text-amber-800">Total {monthLabel}</td>
+                        {MP.map(mp => (
+                          <td key={mp} className={`py-2 px-3 text-right ${monthTotals[mp] > 0 ? MP_COLOR[mp] : 'text-gray-300'}`}>
+                            {fmt(monthTotals[mp])}
+                          </td>
+                        ))}
+                        <td className="py-2 px-4 text-right font-bold text-amber-700">{fmt(monthTotals['total'])}</td>
+                      </tr>
+                    );
+                    monthTotals = { GrabFood: 0, GoFood: 0, ShopeeFood: 0, total: 0 };
+                  };
+
+                  data.forEach((row, i) => {
+                    const d = new Date(row.tanggal);
+                    const month = `${d.getFullYear()}-${d.getMonth()}`;
+                    const mLabel = d.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+
+                    if (mode === 'daily' && currentMonth && currentMonth !== month) {
+                      flushMonth();
+                    }
+                    currentMonth = month;
+                    monthLabel = mLabel;
+
+                    MP.forEach(mp => { monthTotals[mp] = (monthTotals[mp] || 0) + (row[mp]?.netSales || 0); });
+                    monthTotals['total'] = (monthTotals['total'] || 0) + (row.total?.netSales || 0);
+
+                    rows.push(
+                      <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
+                        <td className="py-2.5 px-4 font-medium text-gray-700 whitespace-nowrap">{dateLabel(row)}</td>
+                        {MP.map(mp => (
+                          <td key={mp} className={`py-2.5 px-3 text-right ${row[mp]?.netSales > 0 ? MP_COLOR[mp] : 'text-gray-300'}`}>
+                            {fmt(row[mp]?.netSales || 0)}
+                          </td>
+                        ))}
+                        <td className="py-2.5 px-4 text-right font-bold text-gray-900 bg-amber-50/50">
+                          {fmt(row.total?.netSales || 0)}
+                        </td>
+                      </tr>
+                    );
+                  });
+
+                  if (mode === 'daily') flushMonth();
+                  return rows;
+                })()}
               </tbody>
               {data.length > 0 && (
                 <tfoot>
