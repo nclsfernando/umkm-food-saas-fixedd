@@ -17,8 +17,8 @@ function fmt(v: number) { return v > 0 ? formatRupiah(v) : '-'; }
 export default function LaporanPage() {
   const now = new Date();
   const [mode, setMode] = useState<ViewMode>('daily');
-  const [from, setFrom] = useState(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`);
-  const [to, setTo] = useState(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(new Date(now.getFullYear(), now.getMonth()+1, 0).getDate()).padStart(2,'0')}`);
+  const [from, setFrom] = useState('2024-01-01');
+  const [to, setTo] = useState(`${now.getFullYear()}-12-31`);
   const [year, setYear] = useState(String(now.getFullYear()));
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
