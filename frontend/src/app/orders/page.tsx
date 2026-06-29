@@ -10,6 +10,12 @@ const MP_BADGE: Record<string, string> = {
   SHOPEEFOOD: 'badge-shopeefood',
 };
 
+const MP_LABEL: Record<string, string> = {
+  GOFOOD: 'GoFood',
+  GRABFOOD: 'GrabFood',
+  SHOPEEFOOD: 'ShopeeFood',
+};
+
 export default function OrdersPage() {
   const { from: df, to: dt } = thisMonthRange();
   const [orders, setOrders] = useState<any[]>([]);
@@ -32,27 +38,39 @@ export default function OrdersPage() {
 
   useEffect(() => { load(); }, [page]);
   const search = () => { setPage(1); load(); };
-
   const totalPages = Math.ceil(total / limit);
 
+  // Parse item name untuk ambil detail jenis/metode/id
+  const parseItemName = (items: any[]) => {
+    if (!items || items.length === 0) return { jenis: '-', metode: '-', idPesanan: '-' };
+    const name = items[0]?.productName || '';
+    const parts = name.split(' - ');
+    return {
+      jenis: parts[0] || '-',
+      metode: parts[1] || '-',
+      idPesanan: parts[2] || '-',
+    };
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Pesanan</h1>
+        <h1 className="text-xl md:text-2xl font-bold text-gray-900">Pesanan</h1>
         <p className="text-gray-500 text-sm mt-1">{total} transaksi ditemukan</p>
       </div>
 
       <div className="card">
-        <div className="flex flex-wrap gap-3 mb-4">
-          <input type="date" className="input w-auto" value={from} onChange={e => setFrom(e.target.value)} />
-          <input type="date" className="input w-auto" value={to} onChange={e => setTo(e.target.value)} />
-          <select className="input w-auto" value={marketplace} onChange={e => setMarketplace(e.target.value)}>
+        {/* Filter */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          <input type="date" className="input w-auto text-sm" value={from} onChange={e => setFrom(e.target.value)} />
+          <input type="date" className="input w-auto text-sm" value={to} onChange={e => setTo(e.target.value)} />
+          <select className="input w-auto text-sm" value={marketplace} onChange={e => setMarketplace(e.target.value)}>
             <option value="">Semua Platform</option>
-            <option value="GOFOOD">GoFood</option>
             <option value="GRABFOOD">GrabFood</option>
+            <option value="GOFOOD">GoFood</option>
             <option value="SHOPEEFOOD">ShopeeFood</option>
           </select>
-          <button onClick={search} className="btn-primary flex items-center gap-2">
+          <button onClick={search} className="btn-primary flex items-center gap-2 text-sm">
             <Search className="w-4 h-4" /> Cari
           </button>
         </div>
@@ -60,41 +78,68 @@ export default function OrdersPage() {
         {loading ? (
           <div className="text-center py-12 text-gray-400">Memuat...</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto -mx-4 md:mx-0">
+            <table className="w-full text-xs md:text-sm min-w-[900px]">
               <thead>
-                <tr className="border-b border-gray-100 text-left text-xs text-gray-500 uppercase">
-                  <th className="pb-3 pr-4">Tanggal</th>
-                  <th className="pb-3 pr-4">Platform</th>
-                  <th className="pb-3 pr-4">Order ID</th>
-                  <th className="pb-3 pr-4 text-right">Gross Sales</th>
-                  <th className="pb-3 pr-4 text-right">Diskon</th>
-                  <th className="pb-3 pr-4 text-right">Komisi</th>
-                  <th className="pb-3 text-right">Net Sales</th>
+                <tr className="border-b border-gray-100 text-left text-xs text-gray-400 uppercase tracking-wide">
+                  <th className="pb-3 pr-3 pl-4 md:pl-0">Tanggal</th>
+                  <th className="pb-3 pr-3">Platform</th>
+                  <th className="pb-3 pr-3">Jenis</th>
+                  <th className="pb-3 pr-3">Metode Bayar</th>
+                  <th className="pb-3 pr-3">ID Pesanan</th>
+                  <th className="pb-3 pr-3 text-right">Gross Sales</th>
+                  <th className="pb-3 pr-3 text-right">Biaya Jasa</th>
+                  <th className="pb-3 pr-3 text-right">Biaya Sukses</th>
+                  <th className="pb-3 pr-3 text-right">MDR</th>
+                  <th className="pb-3 text-right">Net Cair</th>
                 </tr>
               </thead>
               <tbody>
                 {orders.length === 0 ? (
-                  <tr><td colSpan={7} className="text-center py-12 text-gray-400">Belum ada data</td></tr>
-                ) : orders.map(o => (
-                  <tr key={o.id} className="border-b border-gray-50 hover:bg-gray-50">
-                    <td className="py-3 pr-4 text-gray-600">{formatDate(o.orderDate)}</td>
-                    <td className="py-3 pr-4"><span className={MP_BADGE[o.marketplace]}>{o.marketplace === 'GOFOOD' ? 'GoFood' : o.marketplace === 'GRABFOOD' ? 'GrabFood' : 'ShopeeFood'}</span></td>
-                    <td className="py-3 pr-4 font-mono text-xs text-gray-500">{o.orderId}</td>
-                    <td className="py-3 pr-4 text-right">{formatRupiah(Number(o.grossSales))}</td>
-                    <td className="py-3 pr-4 text-right text-red-500">{o.discount > 0 ? `-${formatRupiah(Number(o.discount))}` : '-'}</td>
-                    <td className="py-3 pr-4 text-right text-orange-500">{o.commission > 0 ? `-${formatRupiah(Number(o.commission))}` : '-'}</td>
-                    <td className="py-3 text-right font-semibold text-green-700">{formatRupiah(Number(o.netSales))}</td>
-                  </tr>
-                ))}
+                  <tr><td colSpan={10} className="text-center py-12 text-gray-400">Belum ada data</td></tr>
+                ) : orders.map(o => {
+                  const { jenis, metode, idPesanan } = parseItemName(o.items);
+                  // Estimasi breakdown komisi dari total commission
+                  const totalComm = Number(o.commission);
+                  return (
+                    <tr key={o.id} className="border-b border-gray-50 hover:bg-gray-50">
+                      <td className="py-2.5 pr-3 pl-4 md:pl-0 text-gray-600 whitespace-nowrap">{formatDate(o.orderDate)}</td>
+                      <td className="py-2.5 pr-3">
+                        <span className={MP_BADGE[o.marketplace] || 'badge-grabfood'}>
+                          {MP_LABEL[o.marketplace] || o.marketplace}
+                        </span>
+                      </td>
+                      <td className="py-2.5 pr-3 text-gray-700 whitespace-nowrap">{jenis}</td>
+                      <td className="py-2.5 pr-3 text-gray-500 whitespace-nowrap">{metode}</td>
+                      <td className="py-2.5 pr-3 font-mono text-gray-400 whitespace-nowrap">{idPesanan !== '-' ? idPesanan : ''}</td>
+                      <td className="py-2.5 pr-3 text-right font-medium">{formatRupiah(Number(o.grossSales))}</td>
+                      <td className="py-2.5 pr-3 text-right text-red-500">{totalComm > 0 ? `-${formatRupiah(totalComm)}` : '-'}</td>
+                      <td className="py-2.5 pr-3 text-right text-orange-400">-</td>
+                      <td className="py-2.5 pr-3 text-right text-orange-400">-</td>
+                      <td className="py-2.5 text-right font-semibold text-green-700">{formatRupiah(Number(o.netSales))}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
+              {orders.length > 0 && (
+                <tfoot>
+                  <tr className="border-t-2 border-gray-200 bg-gray-50 font-semibold">
+                    <td colSpan={5} className="py-3 pl-4 md:pl-0 text-sm text-gray-600">Total ({orders.length} transaksi)</td>
+                    <td className="py-3 pr-3 text-right text-sm">{formatRupiah(orders.reduce((a, o) => a + Number(o.grossSales), 0))}</td>
+                    <td className="py-3 pr-3 text-right text-sm text-red-500">-{formatRupiah(orders.reduce((a, o) => a + Number(o.commission), 0))}</td>
+                    <td className="py-3 pr-3 text-right text-sm">-</td>
+                    <td className="py-3 pr-3 text-right text-sm">-</td>
+                    <td className="py-3 text-right text-sm text-green-700">{formatRupiah(orders.reduce((a, o) => a + Number(o.netSales), 0))}</td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         )}
 
         {totalPages > 1 && (
           <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
-            <p className="text-sm text-gray-500">Halaman {page} dari {totalPages}</p>
+            <p className="text-sm text-gray-500">Hal. {page} / {totalPages}</p>
             <div className="flex gap-2">
               <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="btn-secondary p-2"><ChevronLeft className="w-4 h-4" /></button>
               <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="btn-secondary p-2"><ChevronRight className="w-4 h-4" /></button>

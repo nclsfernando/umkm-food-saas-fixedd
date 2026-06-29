@@ -45,7 +45,7 @@ export class ImportService {
   }
 
   private parseGrabXlsx(wb: XLSX.WorkBook) {
-    // GrabFood: Sheet "Transaksi"
+    // GrabFood: Sheet "Transaksi" - simpan per baris transaksi
     const sheetName = wb.SheetNames.find(s => s.toLowerCase().includes('transaksi') || s.toLowerCase().includes('transaction')) || wb.SheetNames[1];
     const ws = wb.Sheets[sheetName];
     if (!ws) return [];
@@ -53,39 +53,38 @@ export class ImportService {
     const orders: any[] = [];
 
     for (const row of raw) {
-      const jenis = row['Jenis'] || row['Type'] || '';
-      const status = row['Status'] || '';
-      const kategori = row['Kategori'] || row['Category'] || '';
+      const kategori = String(row['Kategori'] || '').trim();
+      if (kategori !== 'Pembayaran') continue;
 
-      // Only process GrabFood payment rows
-      if (jenis !== 'GrabFood' && !String(jenis).toLowerCase().includes('grabfood')) continue;
-      if (kategori !== 'Pembayaran' && !String(kategori).toLowerCase().includes('payment')) continue;
+      const jumlah = parseFloat(String(row['Jumlah'] || '0').replace(/,/g, '')) || 0;
+      if (jumlah <= 0) continue;
 
-      const grossSales = parseFloat(row['Jumlah'] || row['Amount'] || 0);
-      const commission = Math.abs(parseFloat(row['Biaya jasa'] || row['Service Fee'] || 0));
-      const biayaSukses = Math.abs(parseFloat(row['Biaya sukses pemasaran'] || 0));
-      const totalCommission = commission + biayaSukses;
-      const netSales = parseFloat(row['Penjualan bersih'] || row['Net Sales'] || grossSales);
+      const jenis = String(row['Jenis'] || '').trim();
+      const metodePembayaran = String(row['Metode pembayaran'] || '').trim();
+      const idPesanan = String(row['ID pesanan pendek'] || '').trim();
+      const idTransaksi = String(row['ID transaksi'] || '').trim();
+      const idPencairan = String(row['ID pencairan dana'] || '').trim();
+      const tanggalTransfer = String(row['Tanggal transfer'] || '').trim();
+      const statusRow = String(row['Status'] || 'Ditransfer').trim();
+      const saluranPesanan = String(row['Saluran pesanan'] || '').trim();
 
-      if (!grossSales) continue;
+      const biayaJasa = Math.abs(parseFloat(String(row['Biaya jasa'] || '0').replace(/,/g, '')) || 0);
+      const biayaSukses = Math.abs(parseFloat(String(row['Biaya sukses pemasaran'] || '0').replace(/,/g, '')) || 0);
+      const mdr = Math.abs(parseFloat(String(row['Nilai MDR bersih'] || '0').replace(/,/g, '')) || 0);
+      const commission = biayaJasa + biayaSukses + mdr;
+      const netSales = parseFloat(String(row['Total'] || '0').replace(/,/g, '')) || (jumlah - commission);
 
-      const tanggal = row['Tanggal dibuat'] || row['Created Date'] || row['Diperbarui Pada'] || new Date().toISOString();
-      const orderId = row['ID pesanan pendek'] || row['Short Order ID'] || row['ID transaksi'] || '';
+      const itemName = [jenis, metodePembayaran, idPesanan || idTransaksi].filter(Boolean).join(' - ');
 
       orders.push({
-        orderDate: new Date(tanggal),
+        orderDate: this.parseDate(row['Tanggal dibuat'] || row['Diperbarui Pada'] || ''),
         marketplace: 'GrabFood',
-        grossSales,
+        grossSales: jumlah,
         discount: 0,
-        commission: totalCommission,
-        netSales: netSales > 0 ? netSales : grossSales - totalCommission,
+        commission,
+        netSales: netSales > 0 ? netSales : jumlah - commission,
         status: 'COMPLETED',
-        items: [{
-          productName: `GrabFood Order ${orderId}`,
-          qty: 1,
-          unitPrice: grossSales,
-          subtotal: grossSales,
-        }],
+        items: [{ productName: itemName || 'GrabFood Order', qty: 1, unitPrice: jumlah, subtotal: jumlah }],
       });
     }
     return orders;
