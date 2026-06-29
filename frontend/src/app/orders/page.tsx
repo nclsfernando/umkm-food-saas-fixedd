@@ -17,12 +17,11 @@ const MP_LABEL: Record<string, string> = {
 };
 
 export default function OrdersPage() {
-  const { from: df, to: dt } = thisMonthRange();
   const [orders, setOrders] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [from, setFrom] = useState(df);
-  const [to, setTo] = useState(dt);
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const [marketplace, setMarketplace] = useState('');
   const [loading, setLoading] = useState(true);
   const limit = 20;
