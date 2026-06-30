@@ -26,4 +26,10 @@ export class ImportController {
   async cleanDuplicates() {
     return this.importService.cleanDuplicates();
   }
+
+  @Post('delete-all')
+  @ApiOperation({ summary: 'Hapus SEMUA data pesanan (reset total)' })
+  async deleteAll() {
+    return this.importService.deleteAllOrders();
+  }
 }

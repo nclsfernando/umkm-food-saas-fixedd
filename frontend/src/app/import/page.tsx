@@ -58,6 +58,24 @@ export default function ImportPage() {
     } finally { setCleaning(false); }
   };
 
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteResult, setDeleteResult] = useState<{ deleted: number } | null>(null);
+
+  const handleDeleteAll = async () => {
+    if (!confirmDelete) { setConfirmDelete(true); return; }
+    setDeleting(true);
+    setDeleteResult(null);
+    try {
+      const res = await api.post('/orders/import/delete-all');
+      setDeleteResult(res.data);
+      setCleanResult(null);
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  };
+
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-6">
@@ -145,6 +163,28 @@ export default function ImportPage() {
           className="w-full py-2.5 px-4 bg-red-50 hover:bg-red-100 disabled:opacity-50 text-red-600 text-sm font-medium rounded-lg transition-colors">
           {cleaning ? '⏳ Membersihkan...' : '🗑️ Hapus Data Duplikat'}
         </button>
+      </div>
+
+      {/* Delete all section */}
+      <div className="card mt-4 border-red-200">
+        <p className="font-semibold text-red-700 text-sm mb-1">⚠️ Hapus Semua Data Pesanan</p>
+        <p className="text-xs text-gray-500 mb-3">Reset total — hapus SEMUA transaksi pesanan dari database. Gunakan ini sebelum reimport ulang dari awal.</p>
+        {deleteResult && (
+          <div className="bg-gray-100 text-gray-700 text-xs p-2.5 rounded-lg mb-3">
+            ✅ {deleteResult.deleted} transaksi berhasil dihapus. Database bersih.
+          </div>
+        )}
+        <button onClick={handleDeleteAll} disabled={deleting}
+          className={`w-full py-2.5 px-4 text-sm font-medium rounded-lg transition-colors disabled:opacity-50 ${
+            confirmDelete ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-red-50 text-red-600 hover:bg-red-100'
+          }`}>
+          {deleting ? '⏳ Menghapus...' : confirmDelete ? '⚠️ Yakin? Tap sekali lagi untuk konfirmasi' : '🗑️ Hapus Semua Data Pesanan'}
+        </button>
+        {confirmDelete && (
+          <button onClick={() => setConfirmDelete(false)} className="w-full mt-2 text-xs text-gray-400 underline">
+            Batal
+          </button>
+        )}
       </div>
     </div>
   );

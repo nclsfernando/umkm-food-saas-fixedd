@@ -40,6 +40,13 @@ export class ImportService {
     return { totalBefore: all.length, deleted: toDelete.length, totalAfter: all.length - toDelete.length };
   }
 
+  async deleteAllOrders() {
+    const count = await this.prisma.order.count();
+    await this.prisma.orderItem.deleteMany({});
+    await this.prisma.order.deleteMany({});
+    return { deleted: count };
+  }
+
   async importFile(buffer: Buffer, filename: string) {
     const ext = filename.split('.').pop()?.toLowerCase();
     let rows: any[] = [];
