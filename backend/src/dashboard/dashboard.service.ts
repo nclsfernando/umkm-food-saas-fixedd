@@ -116,20 +116,22 @@ export class DashboardService {
 
   private pivotByMarketplace(rows: any[], dateKey: string) {
     const map: Record<string, any> = {};
-    const marketplaces = ['GrabFood', 'GoFood', 'ShopeeFood'];
+    const mpKeys = ['GRABFOOD', 'GOFOOD', 'SHOPEEFOOD'];
+    const mpLabel: Record<string, string> = { GRABFOOD: 'GrabFood', GOFOOD: 'GoFood', SHOPEEFOOD: 'ShopeeFood' };
 
     for (const row of rows) {
       const key = row[dateKey];
       if (!map[key]) {
         map[key] = { [dateKey]: key, total: { orders: 0, grossSales: 0, commission: 0, netSales: 0 } };
-        for (const mp of marketplaces) map[key][mp] = { orders: 0, grossSales: 0, commission: 0, netSales: 0 };
+        for (const mp of mpKeys) map[key][mpLabel[mp]] = { orders: 0, grossSales: 0, commission: 0, netSales: 0 };
       }
-      const mp = row.marketplace;
-      if (map[key][mp]) {
-        map[key][mp].orders += row.orders;
-        map[key][mp].grossSales += row.gross_sales;
-        map[key][mp].commission += row.commission;
-        map[key][mp].netSales += row.net_sales;
+      const mpRaw = String(row.marketplace || '').toUpperCase();
+      const label = mpLabel[mpRaw];
+      if (label && map[key][label]) {
+        map[key][label].orders += row.orders;
+        map[key][label].grossSales += row.gross_sales;
+        map[key][label].commission += row.commission;
+        map[key][label].netSales += row.net_sales;
       }
       map[key].total.orders += row.orders;
       map[key].total.grossSales += row.gross_sales;
