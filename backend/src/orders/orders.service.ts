@@ -50,10 +50,47 @@ export class OrdersService {
     let created = 0, skipped = 0;
     for (const row of rows) {
       try {
+        const isDup = await this.isDuplicate(row);
+        if (isDup) { skipped++; continue; }
         await this.create(row);
         created++;
       } catch { skipped++; }
     }
     return { created, skipped };
+  }
+
+  private async isDuplicate(row: any): Promise<boolean> {
+    // Cek apakah sudah ada order dengan marketplace + tanggal (hari yang sama) + grossSales + idPesanan yang sama
+    const orderDate = new Date(row.orderDate);
+    const dayStart = new Date(orderDate); dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(orderDate); dayEnd.setHours(23, 59, 59, 999);
+
+    let idPesanan = '';
+    try {
+      const meta = JSON.parse(row.items?.[0]?.productName || '{}');
+      idPesanan = meta.idPesanan || '';
+    } catch { /* format lama, skip id check */ }
+
+    const existing = await this.prisma.order.findFirst({
+      where: {
+        marketplace: row.marketplace,
+        orderDate: { gte: dayStart, lte: dayEnd },
+        grossSales: row.grossSales.toString(),
+      },
+      include: { items: true },
+    });
+
+    if (!existing) return false;
+
+    // Kalau ada idPesanan, cocokkan juga supaya tidak false-positive saat 2 transaksi beda tapi gross sama
+    if (idPesanan) {
+      try {
+        const existingMeta = JSON.parse(existing.items?.[0]?.productName || '{}');
+        return existingMeta.idPesanan === idPesanan;
+      } catch {
+        return true; // format lama, anggap duplikat by date+gross
+      }
+    }
+    return true;
   }
 }

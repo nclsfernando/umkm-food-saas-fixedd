@@ -91,10 +91,13 @@ export default function ImportPage() {
           )}
           {results.map((r, i) => (
             <div key={i} className={`flex items-center justify-between text-xs p-2.5 rounded-lg ${r.error ? 'bg-red-50' : 'bg-green-50'}`}>
-              <span className="text-gray-600 truncate max-w-[65%] text-[11px]">{r.name}</span>
+              <span className="text-gray-600 truncate max-w-[55%] text-[11px]">{r.name}</span>
               {r.error
                 ? <span className="text-red-600 font-medium">❌ {r.error}</span>
-                : <span className="text-green-700 font-semibold">+{r.created} transaksi</span>}
+                : <span className="text-right">
+                    <span className="text-green-700 font-semibold">+{r.created}</span>
+                    {r.skipped > 0 && <span className="text-amber-600 ml-1">({r.skipped} duplikat)</span>}
+                  </span>}
             </div>
           ))}
           {loading && results.length < files.length && (
