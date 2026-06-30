@@ -46,6 +46,17 @@ export default function ImportPage() {
   };
 
   const totalCreated = results.reduce((a, r) => a + r.created, 0);
+  const [cleaning, setCleaning] = useState(false);
+  const [cleanResult, setCleanResult] = useState<{ deleted: number; totalAfter: number } | null>(null);
+
+  const handleCleanDuplicates = async () => {
+    setCleaning(true);
+    setCleanResult(null);
+    try {
+      const res = await api.post('/orders/import/clean-duplicates');
+      setCleanResult(res.data);
+    } finally { setCleaning(false); }
+  };
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -120,6 +131,21 @@ export default function ImportPage() {
           Lihat data pesanan →
         </button>
       )}
+
+      {/* Clean duplicates section */}
+      <div className="card mt-6">
+        <p className="font-semibold text-gray-800 text-sm mb-1">🧹 Bersihkan Data Duplikat</p>
+        <p className="text-xs text-gray-500 mb-3">Hapus transaksi yang tercatat lebih dari sekali (misal karena import file yang sama berulang).</p>
+        {cleanResult && (
+          <div className="bg-green-50 text-green-700 text-xs p-2.5 rounded-lg mb-3">
+            ✅ {cleanResult.deleted} transaksi duplikat dihapus. Total tersisa: {cleanResult.totalAfter}
+          </div>
+        )}
+        <button onClick={handleCleanDuplicates} disabled={cleaning}
+          className="w-full py-2.5 px-4 bg-red-50 hover:bg-red-100 disabled:opacity-50 text-red-600 text-sm font-medium rounded-lg transition-colors">
+          {cleaning ? '⏳ Membersihkan...' : '🗑️ Hapus Data Duplikat'}
+        </button>
+      </div>
     </div>
   );
 }

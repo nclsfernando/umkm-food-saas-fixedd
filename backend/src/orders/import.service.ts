@@ -1,10 +1,44 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { OrdersService } from './orders.service';
+import { PrismaService } from '../prisma/prisma.service';
 import * as XLSX from 'xlsx';
 
 @Injectable()
 export class ImportService {
-  constructor(private orders: OrdersService) {}
+  constructor(private orders: OrdersService, private prisma: PrismaService) {}
+
+  async cleanDuplicates() {
+    const all = await this.prisma.order.findMany({
+      include: { items: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const seen = new Set<string>();
+    const toDelete: string[] = [];
+
+    for (const order of all) {
+      const dateKey = order.orderDate.toISOString().split('T')[0];
+      let idPesanan = '';
+      try {
+        const meta = JSON.parse(order.items?.[0]?.productName || '{}');
+        idPesanan = meta.idPesanan || '';
+      } catch { /* old format */ }
+
+      const key = `${order.marketplace}|${dateKey}|${order.grossSales}|${idPesanan}`;
+      if (seen.has(key)) {
+        toDelete.push(order.id);
+      } else {
+        seen.add(key);
+      }
+    }
+
+    if (toDelete.length > 0) {
+      await this.prisma.orderItem.deleteMany({ where: { orderId: { in: toDelete } } });
+      await this.prisma.order.deleteMany({ where: { id: { in: toDelete } } });
+    }
+
+    return { totalBefore: all.length, deleted: toDelete.length, totalAfter: all.length - toDelete.length };
+  }
 
   async importFile(buffer: Buffer, filename: string) {
     const ext = filename.split('.').pop()?.toLowerCase();

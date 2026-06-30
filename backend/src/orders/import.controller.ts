@@ -20,4 +20,10 @@ export class ImportController {
     if (!file) throw new BadRequestException('File tidak ditemukan');
     return this.importService.importFile(file.buffer, file.originalname);
   }
+
+  @Post('clean-duplicates')
+  @ApiOperation({ summary: 'Hapus transaksi duplikat yang sudah tersimpan' })
+  async cleanDuplicates() {
+    return this.importService.cleanDuplicates();
+  }
 }
