@@ -3,6 +3,13 @@ import { OrdersService } from './orders.service';
 import { PrismaService } from '../prisma/prisma.service';
 import * as XLSX from 'xlsx';
 
+// Bulan Indonesia → nomor
+const BULAN_ID: Record<string, string> = {
+  'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
+  'Mei': '05', 'Jun': '06', 'Jul': '07', 'Agu': '08',
+  'Agus': '08', 'Sep': '09', 'Okt': '10', 'Nov': '11', 'Des': '12',
+};
+
 @Injectable()
 export class ImportService {
   constructor(private orders: OrdersService, private prisma: PrismaService) {}
@@ -61,20 +68,50 @@ export class ImportService {
       throw new BadRequestException('Format file tidak didukung. Gunakan CSV atau XLSX.');
     }
 
-    if (rows.length === 0) throw new BadRequestException('Tidak ada data pesanan yang ditemukan di file.');
+    if (rows.length === 0) throw new BadRequestException('Tidak ada data pesanan yang ditemukan di file. Pastikan format file sesuai.');
     return this.orders.importCsv(rows);
   }
 
   private parseMarketplaceXlsx(wb: XLSX.WorkBook, filename: string) {
     const name = filename.toLowerCase();
+
+    // ── 1. Deteksi format "Laporan Marketplace" (aggregated harian) ──────────
+    const laporanSheet = wb.SheetNames.find(s =>
+      s.toLowerCase() === 'laporan' ||
+      s.toLowerCase().includes('laporan marketplace') ||
+      s.toLowerCase().includes('marketplace')
+    );
+    const isLaporanFilename = name.includes('laporan_marketplace') || name.includes('laporan marketplace');
+
+    if (laporanSheet || isLaporanFilename) {
+      // Cek kolom header — harus ada GrabFood / GoFood / ShopeeFood
+      const targetSheet = laporanSheet || wb.SheetNames[0];
+      const ws = wb.Sheets[targetSheet];
+      const raw: any[] = XLSX.utils.sheet_to_json(ws, { defval: 0, range: 0 });
+      if (raw.length > 0) {
+        const cols = Object.keys(raw[0]).map(k => k.toLowerCase());
+        const isLaporanFormat =
+          cols.some(c => c.includes('grabfood') || c.includes('grab food')) ||
+          cols.some(c => c.includes('gofood') || c.includes('go food')) ||
+          cols.some(c => c.includes('shopeefood') || c.includes('shopee food'));
+        if (isLaporanFormat) {
+          return this.parseLaporanMarketplace(wb, targetSheet);
+        }
+      }
+    }
+
+    // ── 2. Deteksi berdasarkan nama file ────────────────────────────────────
     if (name.includes('grab') || name.includes('grabmerchant')) {
       return this.parseGrabXlsx(wb);
-    } else if (name.includes('gofood') || name.includes('gojek')) {
+    }
+    if (name.includes('gofood') || name.includes('gojek') || name.includes('gobiz')) {
       return this.parseGoFoodXlsx(wb);
-    } else if (name.includes('shopee')) {
+    }
+    if (name.includes('shopee')) {
       return this.parseShopeeXlsx(wb);
     }
-    // Try auto-detect by sheet names
+
+    // ── 3. Auto-detect berdasarkan sheet names ──────────────────────────────
     const sheets = wb.SheetNames.map(s => s.toLowerCase());
     if (sheets.some(s => s.includes('transaksi') || s.includes('transaction'))) {
       return this.parseGrabXlsx(wb);
@@ -82,12 +119,110 @@ export class ImportService {
     if (sheets.some(s => s.includes('rekap') || s.includes('rekapitulasi'))) {
       return this.parseGoFoodXlsx(wb);
     }
+
+    // ── 4. Auto-detect dari kolom sheet pertama ──────────────────────────────
+    const firstWs = wb.Sheets[wb.SheetNames[0]];
+    if (firstWs) {
+      const firstRaw: any[] = XLSX.utils.sheet_to_json(firstWs, { defval: 0 });
+      if (firstRaw.length > 0) {
+        const cols = Object.keys(firstRaw[0]).map(k => k.toLowerCase());
+        if (cols.includes('kategori') && cols.includes('jumlah')) return this.parseGrabXlsx(wb);
+        if (cols.some(c => c.includes('grabfood')) || cols.some(c => c.includes('gofood'))) {
+          return this.parseLaporanMarketplace(wb, wb.SheetNames[0]);
+        }
+      }
+    }
+
     return this.parseGrabXlsx(wb); // default fallback
   }
 
+  // ── Parser: Format Laporan Marketplace Harian ────────────────────────────
+  // Format: Sheet "Laporan", kolom: Tanggal | GrabFood | GoFood | ShopeeFood | Total
+  // Baris: "27 Jun 2026", 90759, 0, 0, 90759
+  // Skip baris: Total Juni 2026, GRAND TOTAL
+  private parseLaporanMarketplace(wb: XLSX.WorkBook, sheetName: string) {
+    const ws = wb.Sheets[sheetName];
+    if (!ws) return [];
+    const raw: any[] = XLSX.utils.sheet_to_json(ws, { defval: 0 });
+    const orders: any[] = [];
+
+    // Cari nama kolom yang tepat (case-insensitive)
+    const findCol = (row: any, candidates: string[]): string => {
+      const keys = Object.keys(row);
+      for (const c of candidates) {
+        const found = keys.find(k => k.toLowerCase().replace(/\s/g, '') === c.toLowerCase().replace(/\s/g, ''));
+        if (found) return found;
+      }
+      return '';
+    };
+
+    const PLATFORMS = [
+      { candidates: ['GrabFood', 'Grab Food', 'Grabfood'], marketplace: 'GRABFOOD' },
+      { candidates: ['GoFood', 'Go Food', 'Gofood'], marketplace: 'GOFOOD' },
+      { candidates: ['ShopeeFood', 'Shopee Food', 'Shopeefood'], marketplace: 'SHOPEEFOOD' },
+    ];
+
+    for (const row of raw) {
+      const tanggalRaw = String(row['Tanggal'] || row['tanggal'] || '').trim();
+      if (!tanggalRaw) continue;
+
+      // Skip baris summary
+      const tLower = tanggalRaw.toLowerCase();
+      if (
+        tLower.startsWith('total') ||
+        tLower.startsWith('grand') ||
+        tLower.startsWith('jumlah') ||
+        tLower.startsWith('subtotal')
+      ) continue;
+
+      const orderDate = this.parseIndonesianDate(tanggalRaw);
+      if (isNaN(orderDate.getTime())) continue;
+
+      // Temukan nama kolom dari baris pertama
+      for (const { candidates, marketplace } of PLATFORMS) {
+        const colName = findCol(row, candidates);
+        if (!colName) continue;
+        const amount = parseFloat(String(row[colName] || '0').replace(/,/g, '')) || 0;
+        if (amount <= 0) continue;
+
+        const idPesanan = `${marketplace}-${tanggalRaw.replace(/\s/g, '-')}`;
+
+        orders.push({
+          orderDate,
+          marketplace,
+          grossSales: amount,
+          discount: 0,
+          commission: 0,
+          netSales: amount,
+          status: 'COMPLETED',
+          items: [{
+            productName: JSON.stringify({
+              jenis: `${colName} Daily`,
+              metode: 'Transfer/Pencairan',
+              idPesanan,
+              biayaJasa: 0,
+              biayaSukses: 0,
+              mdr: 0,
+              tanggalTransfer: tanggalRaw,
+              idPencairan: '',
+            }),
+            qty: 1,
+            unitPrice: amount,
+            subtotal: amount,
+          }],
+        });
+      }
+    }
+    return orders;
+  }
+
+  // ── Parser: GrabMerchant XLSX (sheet "Transaksi") ─────────────────────────
   private parseGrabXlsx(wb: XLSX.WorkBook) {
-    // GrabFood: Sheet "Transaksi" - simpan per baris transaksi
-    const sheetName = wb.SheetNames.find(s => s.toLowerCase().includes('transaksi') || s.toLowerCase().includes('transaction')) || wb.SheetNames[1];
+    const sheetName =
+      wb.SheetNames.find(s =>
+        s.toLowerCase().includes('transaksi') ||
+        s.toLowerCase().includes('transaction')
+      ) || wb.SheetNames[1] || wb.SheetNames[0];
     const ws = wb.Sheets[sheetName];
     if (!ws) return [];
     const raw: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
@@ -106,8 +241,6 @@ export class ImportService {
       const idTransaksi = String(row['ID transaksi'] || '').trim();
       const idPencairan = String(row['ID pencairan dana'] || '').trim();
       const tanggalTransfer = String(row['Tanggal transfer'] || '').trim();
-      const statusRow = String(row['Status'] || 'Ditransfer').trim();
-      const saluranPesanan = String(row['Saluran pesanan'] || '').trim();
 
       const biayaJasa = Math.abs(parseFloat(String(row['Biaya jasa'] || '0').replace(/,/g, '')) || 0);
       const biayaSukses = Math.abs(parseFloat(String(row['Biaya sukses pemasaran'] || '0').replace(/,/g, '')) || 0);
@@ -115,7 +248,6 @@ export class ImportService {
       const commission = biayaJasa + biayaSukses + mdr;
       const netSales = parseFloat(String(row['Total'] || '0').replace(/,/g, '')) || (jumlah - commission);
 
-      // Encode semua detail ke productName sebagai JSON string
       const itemMeta = JSON.stringify({
         jenis,
         metode: metodePembayaran,
@@ -141,15 +273,16 @@ export class ImportService {
     return orders;
   }
 
+  // ── Parser: GoFood/GoBiz XLSX ─────────────────────────────────────────────
   private parseGoFoodXlsx(wb: XLSX.WorkBook) {
-    // GoFood/GoBiz: Sheet "Midtrans Payments" atau sheet lain
-    const sheetName = wb.SheetNames.find(s =>
-      s.toLowerCase().includes('midtrans') ||
-      s.toLowerCase().includes('payment') ||
-      s.toLowerCase().includes('order') ||
-      s.toLowerCase().includes('rekap') ||
-      s.toLowerCase().includes('transaksi')
-    ) || wb.SheetNames[0];
+    const sheetName =
+      wb.SheetNames.find(s =>
+        s.toLowerCase().includes('midtrans') ||
+        s.toLowerCase().includes('payment') ||
+        s.toLowerCase().includes('order') ||
+        s.toLowerCase().includes('rekap') ||
+        s.toLowerCase().includes('transaksi')
+      ) || wb.SheetNames[0];
     const ws = wb.Sheets[sheetName];
     if (!ws) return [];
     const raw: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
@@ -195,13 +328,14 @@ export class ImportService {
     return orders;
   }
 
+  // ── Parser: ShopeeFood XLSX ───────────────────────────────────────────────
   private parseShopeeXlsx(wb: XLSX.WorkBook) {
-    // ShopeeFood: common sheet names
-    const sheetName = wb.SheetNames.find(s =>
-      s.toLowerCase().includes('order') ||
-      s.toLowerCase().includes('pesanan') ||
-      s.toLowerCase().includes('transaksi')
-    ) || wb.SheetNames[0];
+    const sheetName =
+      wb.SheetNames.find(s =>
+        s.toLowerCase().includes('order') ||
+        s.toLowerCase().includes('pesanan') ||
+        s.toLowerCase().includes('transaksi')
+      ) || wb.SheetNames[0];
     const ws = wb.Sheets[sheetName];
     if (!ws) return [];
     const raw: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
@@ -223,7 +357,6 @@ export class ImportService {
         row['Diskon Voucher Shopee'] || row['Diskon'] ||
         row['Promo'] || row['Discount'] || 0
       ));
-
       const tanggal = row['Waktu Pesanan Dibuat'] || row['Tanggal Pesanan'] ||
         row['Order Time'] || row['Create Time'] || new Date().toISOString();
       const orderId = row['No. Pesanan'] || row['Order ID'] || '';
@@ -247,8 +380,8 @@ export class ImportService {
     return orders;
   }
 
+  // ── Parser: CSV GrabFood ──────────────────────────────────────────────────
   private parseGrabCsv(text: string) {
-    // CSV fallback - simple parsing
     const lines = text.split('\n').filter(l => l.trim());
     if (lines.length < 2) return [];
     const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
@@ -281,6 +414,23 @@ export class ImportService {
     return orders;
   }
 
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  /** Parse tanggal Indonesia: "27 Jun 2026" → Date */
+  private parseIndonesianDate(raw: string): Date {
+    const str = String(raw).trim();
+    const parts = str.split(/\s+/);
+    if (parts.length === 3) {
+      const [day, monthStr, year] = parts;
+      const month = BULAN_ID[monthStr] || BULAN_ID[monthStr.slice(0,3)];
+      if (month) {
+        const d = new Date(`${year}-${month}-${day.padStart(2, '0')}T00:00:00Z`);
+        if (!isNaN(d.getTime())) return d;
+      }
+    }
+    return this.parseDate(raw);
+  }
+
   private parseDate(raw: any): Date {
     if (!raw) return new Date();
     if (raw instanceof Date) return raw;
@@ -288,7 +438,7 @@ export class ImportService {
     const d = new Date(str);
     if (!isNaN(d.getTime())) return d;
     const match = str.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
-    if (match) return new Date(`${match[3]}-${match[2].padStart(2,'0')}-${match[1].padStart(2,'0')}`);
-    return new Date();
+    if (match) return new Date(`${match[3]}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`);
+    return this.parseIndonesianDate(str);
   }
 }
