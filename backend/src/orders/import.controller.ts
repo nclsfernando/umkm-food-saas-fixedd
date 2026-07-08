@@ -32,4 +32,10 @@ export class ImportController {
   async deleteAll() {
     return this.importService.deleteAllOrders();
   }
+
+  @Post('recalculate-net')
+  @ApiOperation({ summary: 'Recalculate netSales semua order: grossSales - commission' })
+  async recalculateNet() {
+    return this.importService.recalculateNetSales();
+  }
 }

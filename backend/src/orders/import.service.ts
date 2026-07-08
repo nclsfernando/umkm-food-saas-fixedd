@@ -47,6 +47,22 @@ export class ImportService {
     return { totalBefore: all.length, deleted: toDelete.length, totalAfter: all.length - toDelete.length };
   }
 
+  async recalculateNetSales() {
+    const orders = await this.prisma.order.findMany({
+      select: { id: true, grossSales: true, commission: true },
+    });
+    let updated = 0;
+    for (const o of orders) {
+      const net = Number(o.grossSales) - Number(o.commission);
+      await this.prisma.order.update({
+        where: { id: o.id },
+        data: { netSales: net.toString() },
+      });
+      updated++;
+    }
+    return { updated };
+  }
+
   async deleteAllOrders() {
     const count = await this.prisma.order.count();
     await this.prisma.orderItem.deleteMany({});
