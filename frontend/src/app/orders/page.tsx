@@ -48,9 +48,9 @@ export default function OrdersPage() {
         jenis: meta.jenis || '-',
         metode: meta.metode || '-',
         idPesanan: meta.idPesanan || '-',
-        biayaJasa: meta.biayaJasa || 0,
-        biayaSukses: meta.biayaSukses || 0,
-        mdr: meta.mdr || 0,
+        biayaJasa: Number(meta.biayaJasa) || 0,
+        biayaSukses: Number(meta.biayaSukses) || 0,
+        mdr: Number(meta.mdr) || 0,
         tanggalTransfer: meta.tanggalTransfer || '-',
         idPencairan: meta.idPencairan || '-',
       };
@@ -58,6 +58,11 @@ export default function OrdersPage() {
       const parts = name.split(' - ');
       return { jenis: parts[0] || '-', metode: parts[1] || '-', idPesanan: parts[2] || '-', biayaJasa: 0, biayaSukses: 0, mdr: 0, tanggalTransfer: '-', idPencairan: '-' };
     }
+  };
+
+  // Hitung Net Cair dari grossSales dikurangi semua biaya (konsisten dengan import service)
+  const calcNetCair = (grossSales: number, biayaJasa: number, biayaSukses: number, mdr: number) => {
+    return grossSales - biayaJasa - biayaSukses - mdr;
   };
 
   return (
@@ -109,6 +114,7 @@ export default function OrdersPage() {
                   <tr><td colSpan={10} className="text-center py-12 text-gray-400">Belum ada data</td></tr>
                 ) : orders.map(o => {
                   const { jenis, metode, idPesanan, biayaJasa, biayaSukses, mdr, tanggalTransfer, idPencairan } = parseItemMeta(o.items);
+                  const netCair = calcNetCair(Number(o.grossSales), biayaJasa, biayaSukses, mdr);
                   return (
                     <tr key={o.id} className="border-b border-gray-50 hover:bg-gray-50">
                       <td className="py-2.5 pr-3 pl-4 md:pl-0 text-gray-600 whitespace-nowrap">{formatDate(o.orderDate)}</td>
@@ -124,7 +130,7 @@ export default function OrdersPage() {
                       <td className="py-2.5 pr-3 text-right text-red-500">{biayaJasa > 0 ? `-${formatRupiah(biayaJasa)}` : '-'}</td>
                       <td className="py-2.5 pr-3 text-right text-orange-500">{biayaSukses > 0 ? `-${formatRupiah(biayaSukses)}` : '-'}</td>
                       <td className="py-2.5 pr-3 text-right text-orange-400">{mdr > 0 ? `-${formatRupiah(mdr)}` : '-'}</td>
-                      <td className="py-2.5 pr-3 text-right font-semibold text-green-700">{formatRupiah(Number(o.netSales))}</td>
+                      <td className="py-2.5 pr-3 text-right font-semibold text-green-700">{formatRupiah(netCair)}</td>
                       <td className="py-2.5 pr-3 text-gray-400 whitespace-nowrap text-xs" title="Tanggal dana cair ke rekening">{tanggalTransfer !== '-' ? tanggalTransfer : '-'}</td>
                       <td className="py-2.5 font-mono text-gray-400 text-xs whitespace-nowrap">{idPencairan !== '-' ? idPencairan : '-'}</td>
                     </tr>
@@ -139,7 +145,10 @@ export default function OrdersPage() {
                     <td className="py-3 pr-3 text-right text-sm text-red-500">-{formatRupiah(orders.reduce((a, o) => a + (parseItemMeta(o.items).biayaJasa), 0))}</td>
                     <td className="py-3 pr-3 text-right text-sm text-orange-500">-{formatRupiah(orders.reduce((a, o) => a + (parseItemMeta(o.items).biayaSukses), 0))}</td>
                     <td className="py-3 pr-3 text-right text-sm text-orange-400">-{formatRupiah(orders.reduce((a, o) => a + (parseItemMeta(o.items).mdr), 0))}</td>
-                    <td className="py-3 pr-3 text-right text-sm text-green-700">{formatRupiah(orders.reduce((a, o) => a + Number(o.netSales), 0))}</td>
+                    <td className="py-3 pr-3 text-right text-sm text-green-700">{formatRupiah(orders.reduce((a, o) => {
+                      const { biayaJasa, biayaSukses, mdr } = parseItemMeta(o.items);
+                      return a + calcNetCair(Number(o.grossSales), biayaJasa, biayaSukses, mdr);
+                    }, 0))}</td>
                     <td colSpan={2} />
                   </tr>
                 </tfoot>

@@ -246,7 +246,9 @@ export class ImportService {
       const biayaSukses = Math.abs(parseFloat(String(row['Biaya sukses pemasaran'] || '0').replace(/,/g, '')) || 0);
       const mdr = Math.abs(parseFloat(String(row['Nilai MDR bersih'] || '0').replace(/,/g, '')) || 0);
       const commission = biayaJasa + biayaSukses + mdr;
-      const netSales = parseFloat(String(row['Total'] || '0').replace(/,/g, '')) || (jumlah - commission);
+      // Selalu hitung netSales dari jumlah dikurangi semua biaya (biayaJasa + biayaSukses + mdr)
+      // Kolom "Total" dari GrabMerchant tidak selalu akurat karena bisa exclude biayaSukses
+      const netSales = jumlah - commission;
 
       const itemMeta = JSON.stringify({
         jenis,
