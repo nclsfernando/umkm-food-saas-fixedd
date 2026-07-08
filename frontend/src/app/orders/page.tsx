@@ -24,7 +24,7 @@ export default function OrdersPage() {
   const [to, setTo] = useState('');
   const [marketplace, setMarketplace] = useState('');
   const [loading, setLoading] = useState(true);
-  const limit = 20;
+  const limit = 200;
 
   const load = async () => {
     setLoading(true);
