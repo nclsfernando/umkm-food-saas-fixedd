@@ -25,13 +25,18 @@ api.interceptors.response.use(
 
 export default api;
 
-// Auth
+// === GANTI blok `authApi` di frontend/src/lib/api.ts dengan ini ===
+
 export const authApi = {
   login: (data: { email: string; password: string }) => api.post('/auth/login', data),
   register: (data: any) => api.post('/auth/register', data),
   me: () => api.get('/auth/me'),
-};
 
+  // --- BARU ---
+  forgotPassword: (data: { email: string }) => api.post('/auth/forgot-password', data),
+  resetPassword: (data: { token: string; password: string }) =>
+    api.post('/auth/reset-password', data),
+};
 // Dashboard
 export const dashboardApi = {
   summary: () => api.get('/dashboard/summary'),
