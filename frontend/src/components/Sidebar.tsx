@@ -1,9 +1,8 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, ShoppingBag, Package, Receipt, FileText, LogOut, Upload, BarChart2, Menu, X } from 'lucide-react';
-import Cookies from 'js-cookie';
+import { usePathname } from 'next/navigation';
+import { LayoutDashboard, ShoppingBag, Package, Receipt, FileText, Upload, BarChart2, Menu, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const nav = [
@@ -18,10 +17,8 @@ const nav = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const router = useRouter();
   const [open, setOpen] = useState(false);
 
-  const logout = () => { Cookies.remove('token'); router.push('/login'); };
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/');
 
   const NavLinks = () => (
@@ -36,13 +33,6 @@ export default function Sidebar() {
           </Link>
         ))}
       </nav>
-      <div className="p-3 border-t border-gray-100">
-        <button onClick={logout}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors w-full">
-          <LogOut className="w-4 h-4 shrink-0" />
-          Keluar
-        </button>
-      </div>
     </>
   );
 

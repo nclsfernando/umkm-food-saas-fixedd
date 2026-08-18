@@ -1,12 +1,9 @@
-import { Controller, Post, UploadedFile, UseGuards, UseInterceptors, BadRequestException } from '@nestjs/common';
+import { Controller, Post, UploadedFile, UseInterceptors, BadRequestException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { ImportService } from './import.service';
 
 @ApiTags('Import')
-@ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
 @Controller('orders/import')
 export class ImportController {
   constructor(private importService: ImportService) {}

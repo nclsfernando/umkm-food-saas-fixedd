@@ -1,11 +1,8 @@
-import { Controller, Get, Query, UseGuards, DefaultValuePipe, ParseIntPipe } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Controller, Get, Query, DefaultValuePipe, ParseIntPipe } from '@nestjs/common';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { DashboardService } from './dashboard.service';
 
 @ApiTags('Dashboard')
-@ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
 @Controller('dashboard')
 export class DashboardController {
   constructor(private dashboard: DashboardService) {}
@@ -38,6 +35,8 @@ export class DashboardController {
   reportMonthly(@Query('year') year: string) {
     return this.dashboard.getReportByMonth(year ? parseInt(year) : new Date().getFullYear());
   }
+
+  @Get('top-products')
   @ApiOperation({ summary: 'Produk terlaris' })
   topProducts(
     @Query('from') from: string,

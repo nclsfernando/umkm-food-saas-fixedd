@@ -1,13 +1,9 @@
-import { Controller, Get, Post, Param, Query, Body, UseGuards, Request, UploadedFile, UseInterceptors, ParseIntPipe, DefaultValuePipe } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { Controller, Get, Post, Param, Query, Body, ParseIntPipe, DefaultValuePipe } from '@nestjs/common';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 
 @ApiTags('Orders')
-@ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
 @Controller('orders')
 export class OrdersController {
   constructor(private orders: OrdersService) {}

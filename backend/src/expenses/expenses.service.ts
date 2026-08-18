@@ -6,14 +6,30 @@ import { CreateExpenseDto, UpdateExpenseDto } from './dto/expense.dto';
 export class ExpensesService {
   constructor(private prisma: PrismaService) {}
 
-  create(userId: string, dto: CreateExpenseDto) {
+  private async getDefaultUserId() {
+    const user = await this.prisma.user.findFirst({ orderBy: { createdAt: 'asc' } });
+    if (user) return user.id;
+    const created = await this.prisma.user.create({
+      data: {
+        email: 'mama@umkmfood.id',
+        passwordHash: 'unused',
+        name: 'Mama',
+        businessName: 'UMKM Food Mama',
+        role: 'OWNER',
+      },
+    });
+    return created.id;
+  }
+
+  async create(dto: CreateExpenseDto) {
+    const userId = await this.getDefaultUserId();
     return this.prisma.expense.create({
       data: { ...dto, userId, amount: dto.amount.toString() },
     });
   }
 
-  async findAll(userId: string, from?: string, to?: string, page = 1, limit = 20) {
-    const where: any = { userId };
+  async findAll(from?: string, to?: string, page = 1, limit = 20) {
+    const where: any = {};
     if (from && to) where.expenseDate = { gte: new Date(from), lte: new Date(to) };
     const skip = (page - 1) * limit;
     const [data, total] = await Promise.all([
@@ -39,10 +55,10 @@ export class ExpensesService {
     return this.prisma.expense.delete({ where: { id } });
   }
 
-  async summary(userId: string, from: string, to: string) {
+  async summary(from: string, to: string) {
     const result = await this.prisma.expense.groupBy({
       by: ['category'],
-      where: { userId, expenseDate: { gte: new Date(from), lte: new Date(to) } },
+      where: { expenseDate: { gte: new Date(from), lte: new Date(to) } },
       _sum: { amount: true },
     });
     return result.map(r => ({ category: r.category, total: r._sum.amount ?? 0 }));

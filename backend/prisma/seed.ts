@@ -12,19 +12,38 @@ async function main() {
   }
   console.log('✅ Categories seeded');
 
-  const existing = await prisma.user.findUnique({ where: { email: 'demo@umkmfood.id' } });
-  if (!existing) {
-    const hash = await bcrypt.hash('Demo1234!', 12);
-    const owner = await prisma.user.create({
+  const email = process.env.SEED_EMAIL || 'mama@umkmfood.id';
+  const password = process.env.SEED_PASSWORD || 'Mama1234!';
+  const hash = await bcrypt.hash(password, 12);
+
+  const existingNew = await prisma.user.findUnique({ where: { email } });
+  const existingDemo = await prisma.user.findUnique({ where: { email: 'demo@umkmfood.id' } });
+
+  if (existingNew) {
+    await prisma.user.update({
+      where: { email },
+      data: { passwordHash: hash, name: 'Mama', businessName: 'UMKM Food Mama', role: 'OWNER' },
+    });
+  } else if (existingDemo) {
+    await prisma.user.update({
+      where: { email: 'demo@umkmfood.id' },
+      data: { email, passwordHash: hash, name: 'Mama', businessName: 'UMKM Food Mama', role: 'OWNER' },
+    });
+  } else {
+    await prisma.user.create({
       data: {
-        email: 'demo@umkmfood.id',
+        email,
         passwordHash: hash,
-        name: 'Demo Owner',
-        businessName: 'Warung Geprek Bu Demo',
+        name: 'Mama',
+        businessName: 'UMKM Food Mama',
         role: 'OWNER',
       },
     });
+  }
+  console.log(`✅ Login reset: ${email} / ${password}`);
 
+  const productCount = await prisma.product.count();
+  if (productCount === 0) {
     const foodCat = await prisma.category.findFirst({ where: { name: 'FOOD' } });
     const bevCat = await prisma.category.findFirst({ where: { name: 'BEVERAGE' } });
 
@@ -41,7 +60,6 @@ async function main() {
     for (const p of products) {
       await prisma.product.create({ data: p });
     }
-    console.log(`✅ Demo user: demo@umkmfood.id / Demo1234!`);
     console.log(`✅ ${products.length} sample products created`);
   }
 

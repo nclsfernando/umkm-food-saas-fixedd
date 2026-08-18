@@ -1,42 +1,11 @@
 import axios from 'axios';
-import Cookies from 'js-cookie';
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1',
   timeout: 15000,
 });
 
-api.interceptors.request.use((config) => {
-  const token = Cookies.get('token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
-
-api.interceptors.response.use(
-  (res) => res,
-  (err) => {
-    if (err.response?.status === 401) {
-      Cookies.remove('token');
-      if (typeof window !== 'undefined') window.location.href = '/login';
-    }
-    return Promise.reject(err);
-  },
-);
-
 export default api;
-
-// === GANTI blok `authApi` di frontend/src/lib/api.ts dengan ini ===
-
-export const authApi = {
-  login: (data: { email: string; password: string }) => api.post('/auth/login', data),
-  register: (data: any) => api.post('/auth/register', data),
-  me: () => api.get('/auth/me'),
-
-  // --- BARU ---
-  forgotPassword: (data: { email: string }) => api.post('/auth/forgot-password', data),
-  resetPassword: (data: { token: string; password: string }) =>
-    api.post('/auth/reset-password', data),
-};
 // Dashboard
 export const dashboardApi = {
   summary: () => api.get('/dashboard/summary'),

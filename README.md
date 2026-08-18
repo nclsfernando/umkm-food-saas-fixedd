@@ -128,22 +128,10 @@ docker compose up --build
 
 ---
 
-## Demo Login
-
-```
-Email:    demo@umkmfood.id
-Password: Demo1234!
-```
-
----
-
 ## API Endpoints
 
 | Method | Endpoint                        | Keterangan           |
 |--------|---------------------------------|----------------------|
-| POST   | /api/v1/auth/login              | Login                |
-| POST   | /api/v1/auth/register           | Register             |
-| GET    | /api/v1/auth/me                 | Profile user         |
 | GET    | /api/v1/dashboard/summary       | Ringkasan dashboard  |
 | GET    | /api/v1/dashboard/chart/daily   | Grafik harian        |
 | GET    | /api/v1/dashboard/marketplace   | Breakdown marketplace|
