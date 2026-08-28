@@ -9,7 +9,9 @@ Aplikasi SaaS untuk UMKM kuliner yang berjualan di GoFood, GrabFood, dan ShopeeF
 | Frontend   | Next.js 15, TypeScript, Tailwind CSS, Recharts    |
 | Backend    | NestJS, Prisma ORM, PostgreSQL                    |
 | Deploy FE  | **Vercel** (Root Directory: `frontend`)           |
-| Deploy BE  | **Render** (free web) + **Neon** (free Postgres)  |
+| Deploy BE  | **Zeabur Free** (Docker) + **Neon** (free Postgres) |
+
+> **Kenapa bukan Render?** Render Blueprint / free web sekarang **meminta kartu pembayaran** bahkan untuk plan gratis. Stack ini memakai **Zeabur Free (tanpa kartu)** + **Neon free Postgres**.
 
 ## Struktur Folder
 
@@ -22,13 +24,14 @@ umkm-food-saas/
 │   │   └── lib/           # API client, utils
 │   ├── vercel.json        # ← KRUSIAL: config Vercel
 │   └── package.json
-├── backend/               # NestJS API → deploy ke Render (Docker)
+├── backend/               # NestJS API → deploy ke Zeabur (Docker)
 │   ├── src/               # Source TypeScript
 │   ├── prisma/            # Schema + seed
+│   ├── Dockerfile         # Dipakai Zeabur
 │   └── package.json
-├── render.yaml            # Render Blueprint (API free; DB = Neon)
+├── zbpack.json            # Zeabur: path Dockerfile → backend/Dockerfile
 ├── docker-compose.yml     # Untuk local development
-└── .github/workflows/     # CI/CD otomatis
+└── .github/workflows/     # CI/CD (Vercel + opsional hook Zeabur)
 ```
 
 ---
@@ -50,11 +53,11 @@ Root Directory: frontend
 ```
 
 **3. Environment Variables**
-`frontend/.env.production` sudah berisi:
+`frontend/.env.production` sudah berisi placeholder:
 ```
-NEXT_PUBLIC_API_URL=https://umkm-food-saas-api.onrender.com/api/v1
+NEXT_PUBLIC_API_URL=https://umkm-food-saas-api.zeabur.app/api/v1
 ```
-Vercel Git build akan memakai nilai itu. Override di dashboard Vercel hanya jika perlu.
+Ganti domain itu setelah service Zeabur aktif (lihat langkah bind domain di bawah). Override di dashboard Vercel hanya jika perlu.
 
 **4. Deploy Settings (auto-detect, tapi pastikan):**
 ```
@@ -66,51 +69,60 @@ Install Command:  npm install
 
 ---
 
-## 🟦 Deploy gratis: Render (API) + Neon (Postgres)
+## 🟩 Deploy gratis: Zeabur (API) + Neon (Postgres)
 
-> **Gratis permanen:** Web Service Render (plan free, cold start) + Neon Postgres.  
-> Jangan pakai Render Postgres (berbayar). Railway trial sudah habis — stack ini penggantinya.
+> **Tanpa kartu:** [Zeabur Free](https://zeabur.com) + [Neon free Postgres](https://neon.tech).  
+> Jangan pakai Render (minta kartu) atau Render Postgres (berbayar).
 
-**1. Buat database gratis di Neon**
+### 1. Buat database gratis di Neon
 - Daftar/login: https://neon.tech
-- Buat project baru (gratis)
-- Copy **connection string pooled** (biasanya host berisi `-pooler`)
+- Buat project baru (tier gratis)
+- Copy **connection string pooled** (host biasanya berisi `-pooler`)
 
-**2. Deploy Blueprint Render (free web)**
-- https://dashboard.render.com/blueprint/new?repo=https://github.com/nclsfernando/umkm-food-saas-fixedd
-- File Blueprint: `render.yaml` → service `umkm-food-saas-api` (plan **free**, Docker)
+### 2. Deploy API ke Zeabur
+- Daftar/login: https://zeabur.com (plan Free — **tidak perlu kartu**)
+- Buat Project → Add Service → **Deploy from GitHub**
+- Pilih repo: `nclsfernando/umkm-food-saas-fixedd`
 
-**3. Set `DATABASE_URL` di Render**
-- Di dashboard service → Environment → isi `DATABASE_URL` dengan URL Neon (pooled) dari langkah 1
-- Blueprint menandai `DATABASE_URL` sebagai `sync: false` (wajib diisi manual)
+**Root Directory (pilih salah satu):**
+| Cara | Setting |
+|------|---------|
+| **Disarankan** | Di service Settings → **Root Directory** = `backend` (Dockerfile di `backend/` terdeteksi otomatis) |
+| Alternatif | Root Directory kosong (repo root) + `zbpack.json` mengarah ke `backend/Dockerfile` |
 
-**4. Environment lain (sudah di Blueprint):**
-```
-NODE_ENV        = production
-PORT            = 4000
-FRONTEND_URL    = https://umkm-food-saas-fixedd.vercel.app
-JWT_SECRET      = (generateValue di Blueprint)
-JWT_EXPIRES_IN  = 7d
-```
+### 3. Environment variables di Zeabur (wajib)
 
-**5. Frontend sudah mengarah ke API Render**
-- `frontend/.env.production` → `https://umkm-food-saas-api.onrender.com/api/v1`
-- Health: `https://umkm-food-saas-api.onrender.com/api/v1/health`
+| Variable       | Contoh / catatan |
+|----------------|------------------|
+| `PORT`         | Biarkan Zeabur inject, atau set `4000` (app membaca `PORT`) |
+| `DATABASE_URL` | URL Neon pooled dari langkah 1 |
+| `FRONTEND_URL` | `https://umkm-food-saas-fixedd.vercel.app` |
+| `NODE_ENV`     | `production` |
+| `JWT_SECRET`   | string acak panjang (≥32 karakter) |
+| `JWT_EXPIRES_IN` | `7d` |
 
-**6. Docker & start**
-- `dockerfilePath: ./backend/Dockerfile`
-- `dockerContext: ./backend`
+### 4. Bind domain API
+- Di service Zeabur → Domains → generate / bind subdomain
+- **Nama yang dituju:** `umkm-food-saas-api.zeabur.app` (bind nama ini di dashboard Zeabur; jika sudah dipakai, pakai domain yang diberikan Zeabur lalu update `.env.production` + Vercel)
+- Health check: `https://umkm-food-saas-api.zeabur.app/api/v1/health`
+
+### 5. Frontend mengarah ke API Zeabur
+- `frontend/.env.production` → `https://umkm-food-saas-api.zeabur.app/api/v1`
+- Setelah domain Zeabur final, redeploy Vercel agar `NEXT_PUBLIC_API_URL` ikut ter-build
+
+### 6. Docker & start (sudah di `backend/Dockerfile`)
+- Build context: folder `backend/`
 - Start: `npx prisma migrate deploy && node dist/src/main.js`
 
-**7. Seed setelah deploy pertama (opsional):**
+### 7. Seed setelah deploy pertama (opsional)
 ```bash
-# Via Render Shell di dashboard service:
+# Via Zeabur shell / one-off command di service:
 npx prisma db seed
 ```
 
-**8. CI (opsional)**
-- Render auto-deploy dari Git setelah Blueprint terhubung.
-- Opsional: set secret `RENDER_DEPLOY_HOOK` di GitHub Actions untuk `curl POST` ke deploy hook.
+### 8. CI (opsional)
+- Zeabur biasanya auto-deploy dari Git setelah service terhubung.
+- Opsional: set secret `ZEABUR_DEPLOY_HOOK` di GitHub Actions untuk `curl POST` ke webhook redeploy.
 
 ---
 
@@ -118,8 +130,8 @@ npx prisma db seed
 
 ```bash
 # 1. Clone repo
-git clone https://github.com/yourorg/umkm-food.git
-cd umkm-food
+git clone https://github.com/nclsfernando/umkm-food-saas-fixedd.git
+cd umkm-food-saas-fixedd
 
 # 2. Backend
 cd backend

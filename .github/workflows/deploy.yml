@@ -5,25 +5,24 @@ on:
     branches: [main]
 
 jobs:
-  # ── Backend: Render auto-deploys from Blueprint/Git ─────────────────────────
-  # Optional: set RENDER_DEPLOY_HOOK secret to trigger a deploy hook via curl.
-  # Primary path is Render auto-deploy after connecting the Blueprint.
+  # ── Backend: Zeabur auto-deploys from Git when the service is connected ─────
+  # Optional: set ZEABUR_DEPLOY_HOOK (or webhook URL) secret to trigger redeploy.
   deploy-backend:
-    name: Deploy Backend → Render
+    name: Deploy Backend → Zeabur (optional)
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Render deploy hook (optional)
+      - name: Trigger Zeabur deploy hook (optional)
         env:
-          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+          ZEABUR_DEPLOY_HOOK: ${{ secrets.ZEABUR_DEPLOY_HOOK }}
         run: |
-          if [ -z "${RENDER_DEPLOY_HOOK}" ]; then
-            echo "RENDER_DEPLOY_HOOK not set — skipping CI trigger."
-            echo "Render should auto-deploy from the Blueprint when the repo is connected."
-            echo "Blueprint: https://dashboard.render.com/blueprint/new?repo=https://github.com/nclsfernando/umkm-food-saas-fixedd"
+          if [ -z "${ZEABUR_DEPLOY_HOOK}" ]; then
+            echo "ZEABUR_DEPLOY_HOOK not set — skipping CI trigger."
+            echo "Zeabur should auto-deploy from Git when the service is connected."
+            echo "Dashboard: https://zeabur.com"
             exit 0
           fi
-          curl -fsS -X POST "${RENDER_DEPLOY_HOOK}"
-          echo "Render deploy hook triggered."
+          curl -fsS -X POST "${ZEABUR_DEPLOY_HOOK}"
+          echo "Zeabur deploy hook triggered."
 
   # ── Deploy Frontend to Vercel ──────────────────────────────────────────────
   # Runs even when deploy-backend fails so Vercel is not blocked by backend CI.
