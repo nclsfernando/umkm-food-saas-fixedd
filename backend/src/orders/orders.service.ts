@@ -60,7 +60,6 @@ export class OrdersService {
   }
 
   private async isDuplicate(row: any): Promise<boolean> {
-    // Cek apakah sudah ada order dengan marketplace + tanggal (hari yang sama) + grossSales + idPesanan yang sama
     const orderDate = new Date(row.orderDate);
     const dayStart = new Date(orderDate); dayStart.setHours(0, 0, 0, 0);
     const dayEnd = new Date(orderDate); dayEnd.setHours(23, 59, 59, 999);
@@ -70,6 +69,26 @@ export class OrdersService {
       const meta = JSON.parse(row.items?.[0]?.productName || '{}');
       idPesanan = meta.idPesanan || '';
     } catch { /* format lama, skip id check */ }
+
+    // Rekap Summary: unik per toko + bulan (atau hari), meskipun nominal beda
+    if (idPesanan.startsWith('GRABFOOD-SUMMARY-')) {
+      const monthStart = new Date(orderDate.getFullYear(), orderDate.getMonth(), 1);
+      const monthEnd = new Date(orderDate.getFullYear(), orderDate.getMonth() + 1, 0, 23, 59, 59, 999);
+      const candidates = await this.prisma.order.findMany({
+        where: {
+          marketplace: row.marketplace,
+          orderDate: { gte: monthStart, lte: monthEnd },
+        },
+        include: { items: true },
+      });
+      return candidates.some(o => {
+        try {
+          return JSON.parse(o.items?.[0]?.productName || '{}').idPesanan === idPesanan;
+        } catch {
+          return false;
+        }
+      });
+    }
 
     const existing = await this.prisma.order.findFirst({
       where: {
@@ -82,13 +101,12 @@ export class OrdersService {
 
     if (!existing) return false;
 
-    // Kalau ada idPesanan, cocokkan juga supaya tidak false-positive saat 2 transaksi beda tapi gross sama
     if (idPesanan) {
       try {
         const existingMeta = JSON.parse(existing.items?.[0]?.productName || '{}');
         return existingMeta.idPesanan === idPesanan;
       } catch {
-        return true; // format lama, anggap duplikat by date+gross
+        return true;
       }
     }
     return true;

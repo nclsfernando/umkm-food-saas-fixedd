@@ -180,6 +180,15 @@ export class ImportService {
     return hasStore && hasNet && (hasOrders || hasPay);
   }
 
+  private parseYmd(s: string): Date {
+    const [y, m, d] = s.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  private ymd(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
   private parsePeriodFromFilename(filename: string): {
     from: Date;
     to: Date;
@@ -187,8 +196,8 @@ export class ImportService {
   } {
     const match = filename.match(/(\d{4}-\d{2}-\d{2})_to_(\d{4}-\d{2}-\d{2})/i);
     if (match) {
-      const from = new Date(`${match[1]}T00:00:00`);
-      const to = new Date(`${match[2]}T00:00:00`);
+      const from = this.parseYmd(match[1]);
+      const to = this.parseYmd(match[2]);
       const sameDay = match[1] === match[2];
       const sameMonth = from.getFullYear() === to.getFullYear() && from.getMonth() === to.getMonth();
       return { from, to, granularity: sameDay ? 'daily' : sameMonth ? 'monthly' : 'range' };
@@ -196,6 +205,46 @@ export class ImportService {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
     return { from: now, to: now, granularity: 'daily' };
+  }
+
+  /** Pecah rentang tanggal jadi potongan per bulan (untuk rekap multi-bulan). */
+  private monthChunks(from: Date, to: Date): { start: Date; end: Date; days: number; yyyyMm: string }[] {
+    const chunks: { start: Date; end: Date; days: number; yyyyMm: string }[] = [];
+    let y = from.getFullYear();
+    let m = from.getMonth();
+    const endY = to.getFullYear();
+    const endM = to.getMonth();
+    while (y < endY || (y === endY && m <= endM)) {
+      const monthStart = new Date(y, m, 1);
+      const monthEnd = new Date(y, m + 1, 0);
+      const start = from > monthStart ? from : monthStart;
+      const end = to < monthEnd ? to : monthEnd;
+      const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
+      chunks.push({
+        start,
+        end,
+        days,
+        yyyyMm: `${y}-${String(m + 1).padStart(2, '0')}`,
+      });
+      m += 1;
+      if (m > 11) { m = 0; y += 1; }
+    }
+    return chunks;
+  }
+
+  private splitAmount(total: number, weights: number[]): number[] {
+    const sum = weights.reduce((a, b) => a + b, 0) || 1;
+    const parts = weights.map(w => Number(((total * w) / sum).toFixed(2)));
+    const drift = Number((total - parts.reduce((a, b) => a + b, 0)).toFixed(2));
+    parts[parts.length - 1] = Number((parts[parts.length - 1] + drift).toFixed(2));
+    return parts;
+  }
+
+  private splitInt(total: number, weights: number[]): number[] {
+    const sum = weights.reduce((a, b) => a + b, 0) || 1;
+    const parts = weights.map(w => Math.floor((total * w) / sum));
+    parts[parts.length - 1] += total - parts.reduce((a, b) => a + b, 0);
+    return parts;
   }
 
   private pickCol(row: any, candidates: string[]): string {
@@ -221,15 +270,11 @@ export class ImportService {
 
   // ── Parser: GrabFood Summary (Store / City / GrabPay|OVO / Orders / Net Total)
   // File: Transaction_Stores_YYYY-MM-DD_to_YYYY-MM-DD_*.csv
-  // Bisa harian (from=to) atau bulanan (satu bulan) atau rentang kustom.
+  // 1 bulan → 1 rekap. Beberapa bulan → dipecah otomatis 1 rekap per bulan.
   private parseGrabStoreSummary(raw: any[], filename: string) {
     const { from, to, granularity } = this.parsePeriodFromFilename(filename);
-    const fromKey = from.toISOString().slice(0, 10);
-    const toKey = to.toISOString().slice(0, 10);
-    const jenis =
-      granularity === 'daily' ? 'GrabFood Daily Summary' :
-      granularity === 'monthly' ? 'GrabFood Monthly Summary' :
-      'GrabFood Period Summary';
+    const chunks = this.monthChunks(from, to);
+    const weights = chunks.map(c => c.days);
     const orders: any[] = [];
 
     for (const row of raw) {
@@ -244,50 +289,69 @@ export class ImportService {
       const orderCount = Math.round(this.parseAmount(this.pickValue(row, ['Orders', 'Pesanan', 'Order'])));
       const grabPayCol = this.pickCol(row, ['GrabPay payments', 'GrabPay Payments', 'GrabPay']);
       const ovoCol = this.pickCol(row, ['OVO Payments', 'OVO payments', 'OVO']);
-      const payCount = this.parseAmount(row[grabPayCol || ovoCol] ?? 0);
+      const payCount = Math.round(this.parseAmount(row[grabPayCol || ovoCol] ?? 0));
 
       if (netTotal <= 0 && paymentValue <= 0) continue;
 
       const grossSales = paymentValue > 0 ? paymentValue : netTotal;
       const netSales = netTotal > 0 ? netTotal : grossSales;
-      const commission = Math.max(0, Number((grossSales - netSales).toFixed(2)));
-      const qty = orderCount > 0 ? orderCount : 1;
       const storeSlug = store.replace(/\s+/g, '-').slice(0, 48);
-      const idPesanan = `GRABFOOD-SUMMARY-${storeSlug}-${fromKey}-${toKey}`;
       const metode = grabPayCol ? 'GrabPay' : ovoCol ? 'OVO' : 'GrabFood';
+      const netParts = this.splitAmount(netSales, weights);
+      const grossParts = this.splitAmount(grossSales, weights);
+      const qtyParts = this.splitInt(orderCount > 0 ? orderCount : chunks.length, weights);
+      const payParts = this.splitInt(payCount, weights);
 
-      orders.push({
-        orderDate: from,
-        marketplace: 'GRABFOOD',
-        grossSales,
-        discount: 0,
-        commission,
-        netSales,
-        status: 'COMPLETED',
-        items: [{
-          productName: JSON.stringify({
-            jenis,
-            metode,
-            idPesanan,
-            store,
-            city,
-            orders: qty,
-            grabPayPayments: payCount,
-            paymentValue: grossSales,
-            netTotal: netSales,
-            periodFrom: fromKey,
-            periodTo: toKey,
-            granularity,
-            biayaJasa: commission,
-            biayaSukses: 0,
-            mdr: 0,
-            tanggalTransfer: `${fromKey} s/d ${toKey}`,
-            idPencairan: '',
-          }),
-          qty,
-          unitPrice: Number((netSales / qty).toFixed(2)),
-          subtotal: netSales,
-        }],
+      chunks.forEach((chunk, i) => {
+        const monthNet = netParts[i];
+        const monthGross = grossParts[i];
+        if (monthNet <= 0 && monthGross <= 0) return;
+        const commission = Math.max(0, Number((monthGross - monthNet).toFixed(2)));
+        const qty = Math.max(1, qtyParts[i] || 1);
+        const periodFrom = this.ymd(chunk.start);
+        const periodTo = this.ymd(chunk.end);
+        const idPesanan = granularity === 'daily'
+          ? `GRABFOOD-SUMMARY-${storeSlug}-${periodFrom}`
+          : `GRABFOOD-SUMMARY-${storeSlug}-${chunk.yyyyMm}`;
+        const jenis = granularity === 'daily'
+          ? 'GrabFood Daily Summary'
+          : 'GrabFood Monthly Summary';
+
+        orders.push({
+          orderDate: chunk.start,
+          marketplace: 'GRABFOOD',
+          grossSales: monthGross,
+          discount: 0,
+          commission,
+          netSales: monthNet,
+          status: 'COMPLETED',
+          items: [{
+            productName: JSON.stringify({
+              jenis,
+              metode,
+              idPesanan,
+              store,
+              city,
+              orders: qty,
+              grabPayPayments: payParts[i],
+              paymentValue: monthGross,
+              netTotal: monthNet,
+              periodFrom,
+              periodTo,
+              recapFrom: this.ymd(from),
+              recapTo: this.ymd(to),
+              granularity,
+              biayaJasa: commission,
+              biayaSukses: 0,
+              mdr: 0,
+              tanggalTransfer: `${periodFrom} s/d ${periodTo}`,
+              idPencairan: '',
+            }),
+            qty,
+            unitPrice: Number((monthNet / qty).toFixed(2)),
+            subtotal: monthNet,
+          }],
+        });
       });
     }
     return orders;

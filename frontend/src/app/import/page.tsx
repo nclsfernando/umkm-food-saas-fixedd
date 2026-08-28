@@ -83,7 +83,7 @@ export default function ImportPage() {
         <p className="text-gray-500 text-sm mt-1">Bisa pilih beberapa file sekaligus (GrabFood, GoFood, ShopeeFood)</p>
         <p className="text-gray-400 text-xs mt-2">
           GrabFood Summary: unduh <span className="font-medium">Transaction Stores</span> (format Summary)
-          per hari atau per bulan. Kolom: Store, City, GrabPay/OVO Payments, Orders, Payment Value, Net Total.
+          per bulan, atau langsung rekap beberapa bulan sekaligus — akan dipecah otomatis per bulan.
         </p>
       </div>
 
