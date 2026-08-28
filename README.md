@@ -9,7 +9,7 @@ Aplikasi SaaS untuk UMKM kuliner yang berjualan di GoFood, GrabFood, dan ShopeeF
 | Frontend   | Next.js 15, TypeScript, Tailwind CSS, Recharts    |
 | Backend    | NestJS, Prisma ORM, PostgreSQL                    |
 | Deploy FE  | **Vercel** (Root Directory: `frontend`)           |
-| Deploy BE  | **Render** (free web) + **Neon** (free Postgres)  |
+| Deploy BE  | **Render** free web + **Render** free Postgres    |
 
 ## Struktur Folder
 
@@ -26,7 +26,7 @@ umkm-food-saas/
 │   ├── src/               # Source TypeScript
 │   ├── prisma/            # Schema + seed
 │   └── package.json
-├── render.yaml            # Render Blueprint (API free; DB = Neon)
+├── render.yaml            # Render Blueprint (free web + free Postgres)
 ├── docker-compose.yml     # Untuk local development
 └── .github/workflows/     # CI/CD otomatis
 ```
@@ -66,25 +66,20 @@ Install Command:  npm install
 
 ---
 
-## 🟦 Deploy gratis: Render (API) + Neon (Postgres)
+## 🟦 Deploy gratis: Render (API) + Render Postgres
 
-> **Gratis permanen:** Web Service Render (plan free, cold start) + Neon Postgres.  
-> Jangan pakai Render Postgres (berbayar). Railway trial sudah habis — stack ini penggantinya.
+> **Stack gratis:** Web Service Render (`plan: free`) + Render Postgres (`plan: free`), region Singapore.  
+> **Batasan free:** Postgres expire setelah **30 hari**; web **cold-start** setelah ~**15 menit** idle. Tidak perlu Neon.
 
-**1. Buat database gratis di Neon**
-- Daftar/login: https://neon.tech
-- Buat project baru (gratis)
-- Copy **connection string pooled** (biasanya host berisi `-pooler`)
-
-**2. Deploy Blueprint Render (free web)**
+**1. Deploy Blueprint Render (web + Postgres)**
 - https://dashboard.render.com/blueprint/new?repo=https://github.com/nclsfernando/umkm-food-saas-fixedd
-- File Blueprint: `render.yaml` → service `umkm-food-saas-api` (plan **free**, Docker)
+- File Blueprint: `render.yaml` → `umkm-food-saas-api` (plan **free**, Docker) + `umkm-food-db` (plan **free**, Postgres 16)
 
-**3. Set `DATABASE_URL` di Render**
-- Di dashboard service → Environment → isi `DATABASE_URL` dengan URL Neon (pooled) dari langkah 1
-- Blueprint menandai `DATABASE_URL` sebagai `sync: false` (wajib diisi manual)
+**2. `DATABASE_URL` otomatis dari Blueprint**
+- Blueprint mengisi `DATABASE_URL` via `fromDatabase` → `umkm-food-db` (`connectionString`)
+- Tidak perlu signup Neon atau set manual di dashboard
 
-**4. Environment lain (sudah di Blueprint):**
+**3. Environment lain (sudah di Blueprint):**
 ```
 NODE_ENV        = production
 PORT            = 4000
@@ -93,22 +88,22 @@ JWT_SECRET      = (generateValue di Blueprint)
 JWT_EXPIRES_IN  = 7d
 ```
 
-**5. Frontend sudah mengarah ke API Render**
+**4. Frontend sudah mengarah ke API Render**
 - `frontend/.env.production` → `https://umkm-food-saas-api.onrender.com/api/v1`
 - Health: `https://umkm-food-saas-api.onrender.com/api/v1/health`
 
-**6. Docker & start**
+**5. Docker & start**
 - `dockerfilePath: ./backend/Dockerfile`
 - `dockerContext: ./backend`
 - Start: `npx prisma migrate deploy && node dist/src/main.js`
 
-**7. Seed setelah deploy pertama (opsional):**
+**6. Seed setelah deploy pertama (opsional):**
 ```bash
 # Via Render Shell di dashboard service:
 npx prisma db seed
 ```
 
-**8. CI (opsional)**
+**7. CI (opsional)**
 - Render auto-deploy dari Git setelah Blueprint terhubung.
 - Opsional: set secret `RENDER_DEPLOY_HOOK` di GitHub Actions untuk `curl POST` ke deploy hook.
 
