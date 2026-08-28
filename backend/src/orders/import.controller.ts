@@ -1,5 +1,6 @@
 import { Controller, Post, UploadedFile, UseInterceptors, BadRequestException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { ImportService } from './import.service';
 
@@ -12,10 +13,28 @@ export class ImportController {
   @ApiOperation({ summary: 'Import mutasi dari GrabFood / GoFood / ShopeeFood' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({ schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } })
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
   async import(@UploadedFile() file: Express.Multer.File) {
-    if (!file) throw new BadRequestException('File tidak ditemukan');
-    return this.importService.importFile(file.buffer, file.originalname);
+    if (!file) {
+      throw new BadRequestException('File tidak ditemukan. Pastikan field form bernama "file".');
+    }
+    if (!file.buffer || file.buffer.length === 0) {
+      throw new BadRequestException('File kosong atau gagal diunggah ke memori. Coba lagi dengan file lebih kecil.');
+    }
+    try {
+      return await this.importService.importFile(file.buffer, file.originalname || 'upload.csv');
+    } catch (err: any) {
+      if (err instanceof BadRequestException) throw err;
+      const msg = err?.message || 'Import gagal';
+      throw new BadRequestException(
+        typeof msg === 'string' ? msg : 'Import gagal. Periksa format file dan coba lagi.',
+      );
+    }
   }
 
   @Post('clean-duplicates')

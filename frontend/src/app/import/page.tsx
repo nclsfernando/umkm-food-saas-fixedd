@@ -1,7 +1,7 @@
 'use client';
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import api from '@/lib/api';
+import api, { formatApiError, IMPORT_TIMEOUT_MS } from '@/lib/api';
 
 export default function ImportPage() {
   const router = useRouter();
@@ -35,10 +35,16 @@ export default function ImportPage() {
         form.append('file', file);
         const res = await api.post('/orders/import', form, {
           headers: { 'Content-Type': 'multipart/form-data' },
+          timeout: IMPORT_TIMEOUT_MS,
         });
         newResults.push({ name: file.name, created: res.data.created || 0, skipped: res.data.skipped || 0 });
-      } catch (err: any) {
-        newResults.push({ name: file.name, created: 0, skipped: 0, error: err.response?.data?.message || 'Gagal' });
+      } catch (err: unknown) {
+        newResults.push({
+          name: file.name,
+          created: 0,
+          skipped: 0,
+          error: formatApiError(err, 'Gagal import'),
+        });
       }
       setResults([...newResults]);
     }
@@ -123,11 +129,11 @@ export default function ImportPage() {
             <p className="font-semibold text-green-700 text-sm mb-2">✅ Total {totalCreated} transaksi berhasil diimport</p>
           )}
           {results.map((r, i) => (
-            <div key={i} className={`flex items-center justify-between text-xs p-2.5 rounded-lg ${r.error ? 'bg-red-50' : 'bg-green-50'}`}>
-              <span className="text-gray-600 truncate max-w-[55%] text-[11px]">{r.name}</span>
+            <div key={i} className={`flex gap-2 items-start justify-between text-xs p-2.5 rounded-lg ${r.error ? 'bg-red-50' : 'bg-green-50'}`}>
+              <span className="text-gray-600 truncate max-w-[40%] text-[11px] shrink-0">{r.name}</span>
               {r.error
-                ? <span className="text-red-600 font-medium">❌ {r.error}</span>
-                : <span className="text-right">
+                ? <span className="text-red-600 font-medium text-right leading-snug break-words min-w-0">{r.error}</span>
+                : <span className="text-right shrink-0">
                     <span className="text-green-700 font-semibold">+{r.created}</span>
                     {r.skipped > 0 && <span className="text-amber-600 ml-1">({r.skipped} duplikat)</span>}
                   </span>}
