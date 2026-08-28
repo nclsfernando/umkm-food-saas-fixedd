@@ -86,6 +86,8 @@ export class ImportService {
       const raw: any[] = sheet ? XLSX.utils.sheet_to_json(sheet, { defval: '' }) : [];
       if (raw.length > 0 && this.isGrabStoreSummary(Object.keys(raw[0]))) {
         rows = this.parseGrabStoreSummary(raw, filename);
+      } else if (raw.length > 0 && this.isGoFoodCsv(Object.keys(raw[0]))) {
+        rows = this.parseGoFoodCsv(raw);
       } else {
         rows = this.parseGrabCsv(buffer.toString('utf-8'));
       }
@@ -103,12 +105,15 @@ export class ImportService {
   private parseMarketplaceXlsx(wb: XLSX.WorkBook, filename: string) {
     const name = filename.toLowerCase();
 
-    // â”€â”€ 0. GrabFood Transaction Stores Summary (harian/bulanan) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // â”€â”€ 0. GrabFood Transaction Stores Summary / GoFood settlement columns â”€â”€
     const firstWs = wb.Sheets[wb.SheetNames[0]];
     if (firstWs) {
       const firstRaw: any[] = XLSX.utils.sheet_to_json(firstWs, { defval: '' });
       if (firstRaw.length > 0 && this.isGrabStoreSummary(Object.keys(firstRaw[0]))) {
         return this.parseGrabStoreSummary(firstRaw, filename);
+      }
+      if (firstRaw.length > 0 && this.isGoFoodCsv(Object.keys(firstRaw[0]))) {
+        return this.parseGoFoodCsv(firstRaw);
       }
     }
 
@@ -160,6 +165,7 @@ export class ImportService {
     if (firstWs) {
       const firstRaw: any[] = XLSX.utils.sheet_to_json(firstWs, { defval: 0 });
       if (firstRaw.length > 0) {
+        if (this.isGoFoodCsv(Object.keys(firstRaw[0]))) return this.parseGoFoodCsv(firstRaw);
         const cols = Object.keys(firstRaw[0]).map(k => k.toLowerCase());
         if (cols.includes('kategori') && cols.includes('jumlah')) return this.parseGrabXlsx(wb);
         if (cols.some(c => c.includes('grabfood')) || cols.some(c => c.includes('gofood'))) {
@@ -184,6 +190,18 @@ export class ImportService {
       c.includes('payments')
     );
     return hasStore && hasNet && (hasOrders || hasPay);
+  }
+
+  /** GoFood / GoBiz settlement export (CSV or XLSX with same columns) */
+  private isGoFoodCsv(cols: string[]): boolean {
+    const n = cols.map(c => c.toLowerCase().replace(/\s+/g, '').replace(/^\ufeff/, ''));
+    const hasMerchant = n.some(c => c === 'merchantid' || c.includes('merchantid'));
+    const hasWaktu = n.some(c => c === 'waktutransaksi' || c.includes('waktutransaksi'));
+    const hasPenjualan = n.some(c => c === 'penjualan');
+    const hasPendapatan = n.some(c => c === 'pendapatanbersih' || c.includes('pendapatanbersih'));
+    const hasBiayaGoFood = n.some(c => c.includes('biayagofood'));
+    const hasNomor = n.some(c => c === 'nomorpesanan' || c.includes('nomorpesanan'));
+    return hasPenjualan && (hasPendapatan || hasBiayaGoFood) && (hasMerchant || hasNomor || hasWaktu);
   }
 
   private parseYmd(s: string): Date {
@@ -494,33 +512,26 @@ export class ImportService {
     return orders;
   }
 
-  // â”€â”€ Parser: GoFood/GoBiz XLSX â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  private parseGoFoodXlsx(wb: XLSX.WorkBook) {
-    const sheetName =
-      wb.SheetNames.find(s =>
-        s.toLowerCase().includes('midtrans') ||
-        s.toLowerCase().includes('payment') ||
-        s.toLowerCase().includes('order') ||
-        s.toLowerCase().includes('rekap') ||
-        s.toLowerCase().includes('transaksi')
-      ) || wb.SheetNames[0];
-    const ws = wb.Sheets[sheetName];
-    if (!ws) return [];
-    const raw: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
+  // â”€â”€ Parser: GoFood/GoBiz settlement rows (CSV sheet_to_json or XLSX) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  private parseGoFoodCsv(raw: any[]) {
     const orders: any[] = [];
 
     for (const row of raw) {
-      const grossSales = parseFloat(String(
+      const grossSales = this.parseAmount(
         row['Penjualan'] || row['Harga Menu'] || row['Subtotal'] ||
-        row['Total Harga'] || row['Nilai Pesanan'] || row['Gross Amount'] || '0'
-      ).replace(/,/g, '')) || 0;
+        row['Total Harga'] || row['Nilai Pesanan'] || row['Gross Amount'] || 0
+      );
       if (grossSales <= 0) continue;
 
-      const biayaGoFood = Math.abs(parseFloat(String(row['Biaya GoFood'] || row['Komisi'] || row['Commission'] || '0').replace(/,/g, '')) || 0);
-      const biayaProgram = Math.abs(parseFloat(String(row['Biaya Program'] || '0').replace(/,/g, '')) || 0);
-      const totalBiaya = Math.abs(parseFloat(String(row['Total Biaya'] || '0').replace(/,/g, '')) || (biayaGoFood + biayaProgram));
-      const pendapatanBersih = parseFloat(String(row['Pendapatan Bersih'] || '0').replace(/,/g, '')) || (grossSales - totalBiaya);
-      const nomorPesanan = String(row['Nomor pesanan'] || row['No. Pesanan'] || row['Order ID'] || '').replace(/^'/, '').trim();
+      const biayaGoFood = Math.abs(this.parseAmount(row['Biaya GoFood'] || row['Komisi'] || row['Commission'] || 0));
+      const biayaProgram = Math.abs(this.parseAmount(row['Biaya Program'] || 0));
+      const totalBiayaRaw = this.parseAmount(row['Total Biaya'] || '');
+      const totalBiaya = Math.abs(totalBiayaRaw > 0 ? totalBiayaRaw : (biayaGoFood + biayaProgram));
+      const pendapatanRaw = this.parseAmount(row['Pendapatan Bersih'] || '');
+      const pendapatanBersih = pendapatanRaw > 0 ? pendapatanRaw : (grossSales - totalBiaya);
+      const nomorPesanan = String(row['Nomor pesanan'] || row['No. Pesanan'] || row['Order ID'] || '')
+        .replace(/^'/, '')
+        .trim();
       const namaProgram = String(row['Nama Program'] || '').trim();
       const merchantId = String(row['Merchant ID'] || '').trim();
 
@@ -547,6 +558,22 @@ export class ImportService {
       });
     }
     return orders;
+  }
+
+  // â”€â”€ Parser: GoFood/GoBiz XLSX â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  private parseGoFoodXlsx(wb: XLSX.WorkBook) {
+    const sheetName =
+      wb.SheetNames.find(s =>
+        s.toLowerCase().includes('midtrans') ||
+        s.toLowerCase().includes('payment') ||
+        s.toLowerCase().includes('order') ||
+        s.toLowerCase().includes('rekap') ||
+        s.toLowerCase().includes('transaksi')
+      ) || wb.SheetNames[0];
+    const ws = wb.Sheets[sheetName];
+    if (!ws) return [];
+    const raw: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
+    return this.parseGoFoodCsv(raw);
   }
 
   // â”€â”€ Parser: ShopeeFood XLSX â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
