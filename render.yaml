@@ -1,11 +1,7 @@
-# Render Blueprint — NestJS API + PostgreSQL
+# Render Blueprint — NestJS API (free) + Neon Postgres (external)
 # Connect repo: https://dashboard.render.com/blueprint/new?repo=https://github.com/nclsfernando/umkm-food-saas-fixedd
 # Auto-deploys on push to the linked branch after Blueprint is created.
-
-databases:
-  - name: umkm-food-saas-db
-    plan: free
-    databaseName: umkm_food
+# DATABASE_URL: set manually in Render dashboard to your Neon pooled connection string.
 
 services:
   - type: web
@@ -24,9 +20,7 @@ services:
       - key: FRONTEND_URL
         value: https://umkm-food-saas-fixedd.vercel.app
       - key: DATABASE_URL
-        fromDatabase:
-          name: umkm-food-saas-db
-          property: connectionString
+        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_EXPIRES_IN
