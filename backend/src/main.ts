@@ -16,10 +16,11 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
 
+  const frontendUrl = (config.get<string>('FRONTEND_URL') || 'http://localhost:3000').replace(/\/$/, '');
   app.enableCors({
     origin: (origin, callback) => {
       const allowed = [
-        config.get('FRONTEND_URL') || 'http://localhost:3000',
+        frontendUrl,
         'https://umkm-food-saas-fixedd.vercel.app',
       ];
       if (!origin || allowed.includes(origin) || origin.endsWith('.vercel.app')) {
@@ -48,9 +49,18 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('api/docs', app, document);
 
-  const port = config.get('PORT') || 4000;
-  await app.listen(port);
-  console.log(`🚀 Running on http://localhost:${port}`);
-  console.log(`📖 Swagger: http://localhost:${port}/api/docs`);
+  // Free hosts (Zeabur) inject PORT; bind all interfaces for container networking
+  const port = Number(config.get('PORT') || 4000);
+  await app.listen(port, '0.0.0.0');
+
+  // Multi-month GrabFood summary imports can take >30s on cold DB
+  const server = app.getHttpServer();
+  server.setTimeout(5 * 60 * 1000);
+  server.headersTimeout = 6 * 60 * 1000;
+  server.requestTimeout = 5 * 60 * 1000;
+  server.keepAliveTimeout = 65 * 1000;
+
+  console.log(`🚀 Running on http://0.0.0.0:${port}`);
+  console.log(`📖 Swagger: http://0.0.0.0:${port}/api/docs`);
 }
 bootstrap();

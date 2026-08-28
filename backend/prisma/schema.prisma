@@ -3,8 +3,10 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Neon: use pooled URL in DATABASE_URL; set DIRECT_URL to the non-pooler host for migrate
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -33,8 +35,8 @@ model Product {
   categoryId   String
   category     Category @relation(fields: [categoryId], references: [id])
   isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 
 model Order {
@@ -82,6 +84,6 @@ model Expense {
   amount      Decimal
   expenseDate DateTime
   description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
