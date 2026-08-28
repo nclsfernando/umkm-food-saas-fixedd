@@ -75,8 +75,14 @@ export class ImportService {
     let rows: any[] = [];
 
     if (ext === 'csv') {
-      const text = buffer.toString('utf-8');
-      rows = this.parseGrabCsv(text);
+      const wb = XLSX.read(buffer, { type: 'buffer' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const raw: any[] = sheet ? XLSX.utils.sheet_to_json(sheet, { defval: '' }) : [];
+      if (raw.length > 0 && this.isGrabStoreSummary(Object.keys(raw[0]))) {
+        rows = this.parseGrabStoreSummary(raw, filename);
+      } else {
+        rows = this.parseGrabCsv(buffer.toString('utf-8'));
+      }
     } else if (ext === 'xlsx' || ext === 'xls') {
       const wb = XLSX.read(buffer, { type: 'buffer' });
       rows = this.parseMarketplaceXlsx(wb, filename);
@@ -91,6 +97,15 @@ export class ImportService {
   private parseMarketplaceXlsx(wb: XLSX.WorkBook, filename: string) {
     const name = filename.toLowerCase();
 
+    // ── 0. GrabFood Transaction Stores Summary (harian/bulanan) ─────────────
+    const firstWs = wb.Sheets[wb.SheetNames[0]];
+    if (firstWs) {
+      const firstRaw: any[] = XLSX.utils.sheet_to_json(firstWs, { defval: '' });
+      if (firstRaw.length > 0 && this.isGrabStoreSummary(Object.keys(firstRaw[0]))) {
+        return this.parseGrabStoreSummary(firstRaw, filename);
+      }
+    }
+
     // ── 1. Deteksi format "Laporan Marketplace" (aggregated harian) ──────────
     const laporanSheet = wb.SheetNames.find(s =>
       s.toLowerCase() === 'laporan' ||
@@ -100,7 +115,6 @@ export class ImportService {
     const isLaporanFilename = name.includes('laporan_marketplace') || name.includes('laporan marketplace');
 
     if (laporanSheet || isLaporanFilename) {
-      // Cek kolom header — harus ada GrabFood / GoFood / ShopeeFood
       const targetSheet = laporanSheet || wb.SheetNames[0];
       const ws = wb.Sheets[targetSheet];
       const raw: any[] = XLSX.utils.sheet_to_json(ws, { defval: 0, range: 0 });
@@ -137,7 +151,6 @@ export class ImportService {
     }
 
     // ── 4. Auto-detect dari kolom sheet pertama ──────────────────────────────
-    const firstWs = wb.Sheets[wb.SheetNames[0]];
     if (firstWs) {
       const firstRaw: any[] = XLSX.utils.sheet_to_json(firstWs, { defval: 0 });
       if (firstRaw.length > 0) {
@@ -149,20 +162,208 @@ export class ImportService {
       }
     }
 
-    return this.parseGrabXlsx(wb); // default fallback
+    return this.parseGrabXlsx(wb);
+  }
+
+  /** Grab merchant portal: Download transactions → Summary */
+  private isGrabStoreSummary(cols: string[]): boolean {
+    const n = cols.map(c => c.toLowerCase().replace(/\s+/g, '').replace(/^\ufeff/, ''));
+    const hasStore = n.some(c => c === 'store' || c === 'toko' || c === 'outlet');
+    const hasNet = n.some(c => c === 'nettotal' || c.includes('nettotal') || c === 'net');
+    const hasOrders = n.some(c => c === 'orders' || c === 'pesanan' || c === 'order');
+    const hasPay = n.some(c =>
+      c.includes('grabpay') ||
+      c.includes('ovo') ||
+      c.includes('paymentvalue') ||
+      c.includes('payments')
+    );
+    return hasStore && hasNet && (hasOrders || hasPay);
+  }
+
+  private parseYmd(s: string): Date {
+    const [y, m, d] = s.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  private ymd(d: Date): string {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  private parsePeriodFromFilename(filename: string): {
+    from: Date;
+    to: Date;
+    granularity: 'daily' | 'monthly' | 'range';
+  } {
+    const match = filename.match(/(\d{4}-\d{2}-\d{2})_to_(\d{4}-\d{2}-\d{2})/i);
+    if (match) {
+      const from = this.parseYmd(match[1]);
+      const to = this.parseYmd(match[2]);
+      const sameDay = match[1] === match[2];
+      const sameMonth = from.getFullYear() === to.getFullYear() && from.getMonth() === to.getMonth();
+      return { from, to, granularity: sameDay ? 'daily' : sameMonth ? 'monthly' : 'range' };
+    }
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    return { from: now, to: now, granularity: 'daily' };
+  }
+
+  /** Pecah rentang tanggal jadi potongan per bulan (untuk rekap multi-bulan). */
+  private monthChunks(from: Date, to: Date): { start: Date; end: Date; days: number; yyyyMm: string }[] {
+    const chunks: { start: Date; end: Date; days: number; yyyyMm: string }[] = [];
+    let y = from.getFullYear();
+    let m = from.getMonth();
+    const endY = to.getFullYear();
+    const endM = to.getMonth();
+    while (y < endY || (y === endY && m <= endM)) {
+      const monthStart = new Date(y, m, 1);
+      const monthEnd = new Date(y, m + 1, 0);
+      const start = from > monthStart ? from : monthStart;
+      const end = to < monthEnd ? to : monthEnd;
+      const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
+      chunks.push({
+        start,
+        end,
+        days,
+        yyyyMm: `${y}-${String(m + 1).padStart(2, '0')}`,
+      });
+      m += 1;
+      if (m > 11) { m = 0; y += 1; }
+    }
+    return chunks;
+  }
+
+  private splitAmount(total: number, weights: number[]): number[] {
+    const sum = weights.reduce((a, b) => a + b, 0) || 1;
+    const parts = weights.map(w => Number(((total * w) / sum).toFixed(2)));
+    const drift = Number((total - parts.reduce((a, b) => a + b, 0)).toFixed(2));
+    parts[parts.length - 1] = Number((parts[parts.length - 1] + drift).toFixed(2));
+    return parts;
+  }
+
+  private splitInt(total: number, weights: number[]): number[] {
+    const sum = weights.reduce((a, b) => a + b, 0) || 1;
+    const parts = weights.map(w => Math.floor((total * w) / sum));
+    parts[parts.length - 1] += total - parts.reduce((a, b) => a + b, 0);
+    return parts;
+  }
+
+  private pickCol(row: any, candidates: string[]): string {
+    const keys = Object.keys(row);
+    for (const c of candidates) {
+      const want = c.toLowerCase().replace(/\s/g, '');
+      const found = keys.find(k => k.toLowerCase().replace(/\s/g, '').replace(/^\ufeff/, '') === want);
+      if (found) return found;
+    }
+    return '';
+  }
+
+  private pickValue(row: any, candidates: string[]): string {
+    const col = this.pickCol(row, candidates);
+    return col ? String(row[col] ?? '') : '';
+  }
+
+  private parseAmount(raw: any): number {
+    if (raw === null || raw === undefined || raw === '') return 0;
+    const n = parseFloat(String(raw).replace(/,/g, '').replace(/[^\d.-]/g, ''));
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  // ── Parser: GrabFood Summary (Store / City / GrabPay|OVO / Orders / Net Total)
+  // File: Transaction_Stores_YYYY-MM-DD_to_YYYY-MM-DD_*.csv
+  // 1 bulan → 1 rekap. Beberapa bulan → dipecah otomatis 1 rekap per bulan.
+  private parseGrabStoreSummary(raw: any[], filename: string) {
+    const { from, to, granularity } = this.parsePeriodFromFilename(filename);
+    const chunks = this.monthChunks(from, to);
+    const weights = chunks.map(c => c.days);
+    const orders: any[] = [];
+
+    for (const row of raw) {
+      const store = this.pickValue(row, ['Store', 'Toko', 'Outlet']).trim();
+      if (!store) continue;
+      const storeLower = store.toLowerCase();
+      if (storeLower === 'store' || storeLower.startsWith('total') || storeLower.startsWith('grand')) continue;
+
+      const city = this.pickValue(row, ['City', 'Kota']).trim();
+      const netTotal = this.parseAmount(this.pickValue(row, ['Net Total', 'NetTotal', 'Net']));
+      const paymentValue = this.parseAmount(this.pickValue(row, ['Payment Value', 'PaymentValue', 'Gross Sales', 'Gross']));
+      const orderCount = Math.round(this.parseAmount(this.pickValue(row, ['Orders', 'Pesanan', 'Order'])));
+      const grabPayCol = this.pickCol(row, ['GrabPay payments', 'GrabPay Payments', 'GrabPay']);
+      const ovoCol = this.pickCol(row, ['OVO Payments', 'OVO payments', 'OVO']);
+      const payCount = Math.round(this.parseAmount(row[grabPayCol || ovoCol] ?? 0));
+
+      if (netTotal <= 0 && paymentValue <= 0) continue;
+
+      const grossSales = paymentValue > 0 ? paymentValue : netTotal;
+      const netSales = netTotal > 0 ? netTotal : grossSales;
+      const storeSlug = store.replace(/\s+/g, '-').slice(0, 48);
+      const metode = grabPayCol ? 'GrabPay' : ovoCol ? 'OVO' : 'GrabFood';
+      const netParts = this.splitAmount(netSales, weights);
+      const grossParts = this.splitAmount(grossSales, weights);
+      const qtyParts = this.splitInt(orderCount > 0 ? orderCount : chunks.length, weights);
+      const payParts = this.splitInt(payCount, weights);
+
+      chunks.forEach((chunk, i) => {
+        const monthNet = netParts[i];
+        const monthGross = grossParts[i];
+        if (monthNet <= 0 && monthGross <= 0) return;
+        const commission = Math.max(0, Number((monthGross - monthNet).toFixed(2)));
+        const qty = Math.max(1, qtyParts[i] || 1);
+        const periodFrom = this.ymd(chunk.start);
+        const periodTo = this.ymd(chunk.end);
+        const idPesanan = granularity === 'daily'
+          ? `GRABFOOD-SUMMARY-${storeSlug}-${periodFrom}`
+          : `GRABFOOD-SUMMARY-${storeSlug}-${chunk.yyyyMm}`;
+        const jenis = granularity === 'daily'
+          ? 'GrabFood Daily Summary'
+          : 'GrabFood Monthly Summary';
+
+        orders.push({
+          orderDate: chunk.start,
+          marketplace: 'GRABFOOD',
+          grossSales: monthGross,
+          discount: 0,
+          commission,
+          netSales: monthNet,
+          status: 'COMPLETED',
+          items: [{
+            productName: JSON.stringify({
+              jenis,
+              metode,
+              idPesanan,
+              store,
+              city,
+              orders: qty,
+              grabPayPayments: payParts[i],
+              paymentValue: monthGross,
+              netTotal: monthNet,
+              periodFrom,
+              periodTo,
+              recapFrom: this.ymd(from),
+              recapTo: this.ymd(to),
+              granularity,
+              biayaJasa: commission,
+              biayaSukses: 0,
+              mdr: 0,
+              tanggalTransfer: `${periodFrom} s/d ${periodTo}`,
+              idPencairan: '',
+            }),
+            qty,
+            unitPrice: Number((monthNet / qty).toFixed(2)),
+            subtotal: monthNet,
+          }],
+        });
+      });
+    }
+    return orders;
   }
 
   // ── Parser: Format Laporan Marketplace Harian ────────────────────────────
-  // Format: Sheet "Laporan", kolom: Tanggal | GrabFood | GoFood | ShopeeFood | Total
-  // Baris: "27 Jun 2026", 90759, 0, 0, 90759
-  // Skip baris: Total Juni 2026, GRAND TOTAL
   private parseLaporanMarketplace(wb: XLSX.WorkBook, sheetName: string) {
     const ws = wb.Sheets[sheetName];
     if (!ws) return [];
     const raw: any[] = XLSX.utils.sheet_to_json(ws, { defval: 0 });
     const orders: any[] = [];
 
-    // Cari nama kolom yang tepat (case-insensitive)
     const findCol = (row: any, candidates: string[]): string => {
       const keys = Object.keys(row);
       for (const c of candidates) {
@@ -182,7 +383,6 @@ export class ImportService {
       const tanggalRaw = String(row['Tanggal'] || row['tanggal'] || '').trim();
       if (!tanggalRaw) continue;
 
-      // Skip baris summary
       const tLower = tanggalRaw.toLowerCase();
       if (
         tLower.startsWith('total') ||
@@ -194,7 +394,6 @@ export class ImportService {
       const orderDate = this.parseIndonesianDate(tanggalRaw);
       if (isNaN(orderDate.getTime())) continue;
 
-      // Temukan nama kolom dari baris pertama
       for (const { candidates, marketplace } of PLATFORMS) {
         const colName = findCol(row, candidates);
         if (!colName) continue;
@@ -262,8 +461,6 @@ export class ImportService {
       const biayaSukses = Math.abs(parseFloat(String(row['Biaya sukses pemasaran'] || '0').replace(/,/g, '')) || 0);
       const mdr = Math.abs(parseFloat(String(row['Nilai MDR bersih'] || '0').replace(/,/g, '')) || 0);
       const commission = biayaJasa + biayaSukses + mdr;
-      // Selalu hitung netSales dari jumlah dikurangi semua biaya (biayaJasa + biayaSukses + mdr)
-      // Kolom "Total" dari GrabMerchant tidak selalu akurat karena bisa exclude biayaSukses
       const netSales = jumlah - commission;
 
       const itemMeta = JSON.stringify({
@@ -440,7 +637,7 @@ export class ImportService {
     const parts = str.split(/\s+/);
     if (parts.length === 3) {
       const [day, monthStr, year] = parts;
-      const month = BULAN_ID[monthStr] || BULAN_ID[monthStr.slice(0,3)];
+      const month = BULAN_ID[monthStr] || BULAN_ID[monthStr.slice(0, 3)];
       if (month) {
         const d = new Date(`${year}-${month}-${day.padStart(2, '0')}T00:00:00Z`);
         if (!isNaN(d.getTime())) return d;

@@ -81,6 +81,10 @@ export default function ImportPage() {
       <div className="mb-6">
         <h1 className="text-xl md:text-2xl font-bold text-gray-900">Import Mutasi Marketplace</h1>
         <p className="text-gray-500 text-sm mt-1">Bisa pilih beberapa file sekaligus (GrabFood, GoFood, ShopeeFood)</p>
+        <p className="text-gray-400 text-xs mt-2">
+          GrabFood Summary: unduh <span className="font-medium">Transaction Stores</span> (format Summary)
+          per bulan, atau langsung rekap beberapa bulan sekaligus — akan dipecah otomatis per bulan.
+        </p>
       </div>
 
       {/* Upload area */}
@@ -140,7 +144,7 @@ export default function ImportPage() {
         disabled={files.length === 0 || loading}
         className="w-full py-3 px-6 bg-amber-500 hover:bg-amber-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-semibold rounded-xl transition-colors">
         {loading
-          ? `⏳ Mengimport ${results.length}/${files.length}...`
+          ? `⏳ Mengimport ${results.length}/{files.length}...`
           : `📥 Import ${files.length > 0 ? files.length + ' File' : 'Sekarang'}`}
       </button>
 
