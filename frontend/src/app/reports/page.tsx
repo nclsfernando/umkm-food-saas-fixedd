@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { reportsApi } from '@/lib/api';
+import { formatApiError, reportsApi } from '@/lib/api';
 import { formatRupiah, thisMonthRange } from '@/lib/utils';
 import { FileText, TrendingUp, TrendingDown } from 'lucide-react';
 
@@ -10,12 +10,20 @@ export default function ReportsPage() {
   const [to, setTo] = useState(dt);
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const load = async () => {
     setLoading(true);
-    const res = await reportsApi.profitLoss(from, to);
-    setReport(res.data);
-    setLoading(false);
+    setError('');
+    try {
+      const res = await reportsApi.profitLoss(from, to);
+      setReport(res.data);
+    } catch (err) {
+      setReport(null);
+      setError(formatApiError(err, 'Gagal memuat laporan'));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const Row = ({ label, value, highlight, negative }: { label: string; value: number; highlight?: boolean; negative?: boolean }) => (
@@ -50,6 +58,10 @@ export default function ReportsPage() {
           </button>
         </div>
       </div>
+
+      {error && (
+        <div className="card border-red-200 bg-red-50 text-red-700 text-sm">{error}</div>
+      )}
 
       {report && (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">

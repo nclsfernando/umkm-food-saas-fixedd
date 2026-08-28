@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { productsApi } from '@/lib/api';
+import { formatApiError, productsApi } from '@/lib/api';
 import { formatRupiah } from '@/lib/utils';
 import { Plus, Pencil, Trash2, Upload } from 'lucide-react';
 
@@ -8,6 +8,7 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState({ name: '', categoryId: '', sellingPrice: '', hpp: '' });
@@ -18,10 +19,18 @@ export default function ProductsPage() {
 
   const load = async () => {
     setLoading(true);
-    const [p, c] = await Promise.all([productsApi.list(), productsApi.categories()]);
-    setProducts(p.data);
-    setCategories(c.data);
-    setLoading(false);
+    setError('');
+    try {
+      const [p, c] = await Promise.all([productsApi.list(), productsApi.categories()]);
+      setProducts(p.data);
+      setCategories(c.data);
+    } catch (err) {
+      setProducts([]);
+      setCategories([]);
+      setError(formatApiError(err, 'Gagal memuat produk'));
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, []);
@@ -30,17 +39,25 @@ export default function ProductsPage() {
   const openEdit = (p: any) => { setEditing(p); setForm({ name: p.name, categoryId: p.categoryId, sellingPrice: p.sellingPrice, hpp: p.hpp }); setShowForm(true); };
 
   const handleSave = async () => {
-    const payload = { ...form, sellingPrice: Number(form.sellingPrice), hpp: Number(form.hpp) };
-    if (editing) await productsApi.update(editing.id, payload);
-    else await productsApi.create(payload);
-    setShowForm(false);
-    load();
+    try {
+      const payload = { ...form, sellingPrice: Number(form.sellingPrice), hpp: Number(form.hpp) };
+      if (editing) await productsApi.update(editing.id, payload);
+      else await productsApi.create(payload);
+      setShowForm(false);
+      load();
+    } catch (err) {
+      setError(formatApiError(err, 'Gagal menyimpan produk'));
+    }
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm('Nonaktifkan produk ini?')) return;
-    await productsApi.delete(id);
-    load();
+    try {
+      await productsApi.delete(id);
+      load();
+    } catch (err) {
+      setError(formatApiError(err, 'Gagal menonaktifkan produk'));
+    }
   };
 
   const handleImportFile = async (file: File) => {
@@ -51,8 +68,8 @@ export default function ProductsPage() {
       const res = await productsApi.import(file);
       setImportResult(res.data);
       load();
-    } catch (err: any) {
-      setImportError(err.response?.data?.message || 'Gagal mengimport file.');
+    } catch (err) {
+      setImportError(formatApiError(err, 'Gagal mengimport file.'));
     } finally {
       setImporting(false);
       if (fileRef.current) fileRef.current.value = '';
@@ -86,6 +103,10 @@ export default function ProductsPage() {
           </button>
         </div>
       </div>
+
+      {error && (
+        <div className="card border-red-200 bg-red-50 text-red-700 text-sm">{error}</div>
+      )}
 
       {importError && (
         <div className="card border-red-200 bg-red-50 text-red-700 text-sm">

@@ -119,3 +119,70 @@ export async function getTopProducts(from: string, to: string, limit = 10) {
     take: limit,
   });
 }
+
+function pivotByMarketplace(rows: any[], dateKey: string) {
+  const map: Record<string, any> = {};
+  const mpKeys = ['GRABFOOD', 'GOFOOD', 'SHOPEEFOOD'];
+  const mpLabel: Record<string, string> = {
+    GRABFOOD: 'GrabFood',
+    GOFOOD: 'GoFood',
+    SHOPEEFOOD: 'ShopeeFood',
+  };
+
+  for (const row of rows) {
+    const key = String(row[dateKey]);
+    if (!map[key]) {
+      map[key] = { [dateKey]: key, total: { orders: 0, grossSales: 0, commission: 0, netSales: 0 } };
+      for (const mp of mpKeys) map[key][mpLabel[mp]] = { orders: 0, grossSales: 0, commission: 0, netSales: 0 };
+    }
+    const mpRaw = String(row.marketplace || '').toUpperCase();
+    const label = mpLabel[mpRaw];
+    if (label && map[key][label]) {
+      map[key][label].orders += row.orders;
+      map[key][label].grossSales += row.gross_sales;
+      map[key][label].commission += row.commission;
+      map[key][label].netSales += row.net_sales;
+    }
+    map[key].total.orders += row.orders;
+    map[key].total.grossSales += row.gross_sales;
+    map[key].total.commission += row.commission;
+    map[key].total.netSales += row.net_sales;
+  }
+  return Object.values(map);
+}
+
+export async function getReportByDate(from: string, to: string) {
+  const fromDate = from ? new Date(from) : new Date('2000-01-01');
+  const toDate = to ? new Date(to) : new Date('2099-12-31');
+  const rows = await prisma.$queryRaw<any[]>`
+    SELECT 
+      DATE("orderDate") as tanggal,
+      marketplace,
+      COUNT(id)::int as orders,
+      SUM("grossSales")::float as gross_sales,
+      SUM(commission)::float as commission,
+      SUM("netSales")::float as net_sales
+    FROM "Order"
+    WHERE status = 'COMPLETED' AND "orderDate" >= ${fromDate} AND "orderDate" <= ${toDate}
+    GROUP BY DATE("orderDate"), marketplace
+    ORDER BY tanggal DESC, marketplace ASC`;
+  return pivotByMarketplace(rows, 'tanggal');
+}
+
+export async function getReportByMonth(year: number) {
+  const from = new Date(`${year}-01-01`);
+  const to = new Date(`${year}-12-31T23:59:59`);
+  const rows = await prisma.$queryRaw<any[]>`
+    SELECT 
+      TO_CHAR("orderDate", 'YYYY-MM') as bulan,
+      marketplace,
+      COUNT(id)::int as orders,
+      SUM("grossSales")::float as gross_sales,
+      SUM(commission)::float as commission,
+      SUM("netSales")::float as net_sales
+    FROM "Order"
+    WHERE status = 'COMPLETED' AND "orderDate" >= ${from} AND "orderDate" <= ${to}
+    GROUP BY TO_CHAR("orderDate", 'YYYY-MM'), marketplace
+    ORDER BY bulan DESC, marketplace ASC`;
+  return pivotByMarketplace(rows, 'bulan');
+}

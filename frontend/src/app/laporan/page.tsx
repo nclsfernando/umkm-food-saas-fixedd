@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState, useRef } from 'react';
-import api from '@/lib/api';
-import { formatRupiah } from '@/lib/utils';
+import api, { formatApiError } from '@/lib/api';
+import { formatRupiah, toLocalDateString } from '@/lib/utils';
 
 type ViewMode = 'daily' | 'monthly';
 const MP = ['GrabFood', 'GoFood', 'ShopeeFood'];
@@ -14,20 +14,25 @@ export default function LaporanPage() {
   const now = new Date();
   const tableRef = useRef<HTMLTableElement>(null);
   const [mode, setMode] = useState<ViewMode>('daily');
-  const [from, setFrom] = useState('2024-01-01');
-  const [to, setTo] = useState(`${now.getFullYear()}-12-31`);
+  const [from, setFrom] = useState(() => toLocalDateString(new Date(now.getFullYear(), now.getMonth(), 1)));
+  const [to, setTo] = useState(() => toLocalDateString(now));
   const [year, setYear] = useState(String(now.getFullYear()));
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [downloading, setDownloading] = useState<'xlsx'|'pdf'|null>(null);
 
   const load = async () => {
     setLoading(true);
+    setError('');
     try {
       const res = mode === 'daily'
         ? await api.get('/dashboard/report/daily', { params: { from, to } })
         : await api.get('/dashboard/report/monthly', { params: { year } });
       setData(res.data);
+    } catch (err) {
+      setData([]);
+      setError(formatApiError(err, 'Gagal memuat laporan'));
     } finally { setLoading(false); }
   };
 
@@ -221,6 +226,10 @@ export default function LaporanPage() {
           <button onClick={load} className="btn-primary text-sm">Tampilkan</button>
         </div>
       </div>
+
+      {error && (
+        <div className="card border-red-200 bg-red-50 text-red-700 text-sm">{error}</div>
+      )}
 
       {/* Table */}
       <div className="card overflow-hidden p-0">

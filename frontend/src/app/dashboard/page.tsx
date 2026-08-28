@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { dashboardApi } from '@/lib/api';
-import { formatRupiah, thisMonthRange } from '@/lib/utils';
+import { dashboardApi, formatApiError } from '@/lib/api';
+import { formatRupiah, toLocalDateString } from '@/lib/utils';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { TrendingUp, ShoppingBag, Wallet, Clock } from 'lucide-react';
 
@@ -12,13 +12,14 @@ export default function DashboardPage() {
   const [chart, setChart] = useState<any[]>([]);
   const [marketplace, setMarketplace] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const now = new Date();
-    const to = now.toISOString().split('T')[0];
+    const to = toLocalDateString(now);
     const fromDate = new Date(now);
     fromDate.setDate(fromDate.getDate() - 29);
-    const from = fromDate.toISOString().split('T')[0];
+    const from = toLocalDateString(fromDate);
 
     Promise.all([
       dashboardApi.summary(),
@@ -28,10 +29,13 @@ export default function DashboardPage() {
       setSummary(s.data);
       setChart(c.data);
       setMarketplace(m.data);
+    }).catch((err) => {
+      setError(formatApiError(err, 'Gagal memuat dashboard'));
     }).finally(() => setLoading(false));
   }, []);
 
   if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500" /></div>;
+  if (error) return <div className="card border-red-200 bg-red-50 text-red-700 text-sm">{error}</div>;
 
   const stats = [
     { label: 'Net Sales 30 Hari', value: formatRupiah(summary?.month?.netSales ?? 0), icon: TrendingUp, color: 'text-green-600 bg-green-50' },

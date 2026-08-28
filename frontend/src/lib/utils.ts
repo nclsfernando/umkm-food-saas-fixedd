@@ -19,9 +19,17 @@ export function marketplaceLabel(mp: string) {
   return mp === 'GOFOOD' ? 'GoFood' : mp === 'GRABFOOD' ? 'GrabFood' : 'ShopeeFood';
 }
 
+/** Local YYYY-MM-DD (avoid UTC shift from toISOString). */
+export function toLocalDateString(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 export function thisMonthRange() {
   const now = new Date();
-  const from = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-  const to = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-  return { from, to };
+  const from = new Date(now.getFullYear(), now.getMonth(), 1);
+  const to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  return { from: toLocalDateString(from), to: toLocalDateString(to) };
 }

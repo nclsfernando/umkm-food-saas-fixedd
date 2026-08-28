@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { expensesApi } from '@/lib/api';
-import { formatRupiah, formatDate, thisMonthRange } from '@/lib/utils';
+import { expensesApi, formatApiError } from '@/lib/api';
+import { formatRupiah, formatDate, thisMonthRange, toLocalDateString } from '@/lib/utils';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 
 const CATEGORIES = ['Bahan Baku', 'Kemasan', 'Gas & Listrik', 'Gaji', 'Transport', 'Marketing', 'Sewa', 'Lainnya'];
@@ -13,35 +13,52 @@ export default function ExpensesPage() {
   const [from, setFrom] = useState(df);
   const [to, setTo] = useState(dt);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<any>(null);
-  const [form, setForm] = useState({ description: '', category: '', amount: '', expenseDate: new Date().toISOString().split('T')[0] });
+  const [form, setForm] = useState({ description: '', category: '', amount: '', expenseDate: toLocalDateString(new Date()) });
 
   const load = async () => {
     setLoading(true);
-    const res = await expensesApi.list({ from, to, limit: 100 });
-    setExpenses(res.data.data);
-    setTotal(res.data.total);
-    setLoading(false);
+    setError('');
+    try {
+      const res = await expensesApi.list({ from, to, limit: 100 });
+      setExpenses(res.data.data);
+      setTotal(res.data.total);
+    } catch (err) {
+      setExpenses([]);
+      setTotal(0);
+      setError(formatApiError(err, 'Gagal memuat biaya'));
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, []);
 
-  const openAdd = () => { setEditing(null); setForm({ description: '', category: '', amount: '', expenseDate: new Date().toISOString().split('T')[0] }); setShowForm(true); };
+  const openAdd = () => { setEditing(null); setForm({ description: '', category: '', amount: '', expenseDate: toLocalDateString(new Date()) }); setShowForm(true); };
   const openEdit = (e: any) => { setEditing(e); setForm({ description: e.description, category: e.category, amount: e.amount, expenseDate: e.expenseDate?.split('T')[0] }); setShowForm(true); };
 
   const handleSave = async () => {
-    const payload = { ...form, amount: Number(form.amount) };
-    if (editing) await expensesApi.update(editing.id, payload);
-    else await expensesApi.create(payload);
-    setShowForm(false);
-    load();
+    try {
+      const payload = { ...form, amount: Number(form.amount) };
+      if (editing) await expensesApi.update(editing.id, payload);
+      else await expensesApi.create(payload);
+      setShowForm(false);
+      load();
+    } catch (err) {
+      setError(formatApiError(err, 'Gagal menyimpan biaya'));
+    }
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm('Hapus biaya ini?')) return;
-    await expensesApi.delete(id);
-    load();
+    try {
+      await expensesApi.delete(id);
+      load();
+    } catch (err) {
+      setError(formatApiError(err, 'Gagal menghapus biaya'));
+    }
   };
 
   const totalAmount = expenses.reduce((acc, e) => acc + Number(e.amount), 0);
@@ -63,6 +80,10 @@ export default function ExpensesPage() {
         <input type="date" className="input w-auto" value={to} onChange={e => setTo(e.target.value)} />
         <button onClick={load} className="btn-primary">Tampilkan</button>
       </div>
+
+      {error && (
+        <div className="card border-red-200 bg-red-50 text-red-700 text-sm">{error}</div>
+      )}
 
       {showForm && (
         <div className="card border-amber-200 bg-amber-50">
