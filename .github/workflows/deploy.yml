@@ -5,33 +5,28 @@ on:
     branches: [main]
 
 jobs:
-  # ── Deploy Backend to Railway ──────────────────────────────────────────────
+  # ── Backend: Render auto-deploys from Blueprint/Git ─────────────────────────
+  # Optional: set RENDER_DEPLOY_HOOK secret to trigger a deploy hook via curl.
+  # Primary path is Render auto-deploy after connecting the Blueprint.
   deploy-backend:
-    name: Deploy Backend → Railway
+    name: Deploy Backend → Render
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Check Railway token
+      - name: Trigger Render deploy hook (optional)
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
         run: |
-          if [ -z "${RAILWAY_TOKEN}" ]; then
-            echo "::error::RAILWAY_TOKEN secret is missing or empty. Add a non-empty RAILWAY_TOKEN in repository secrets to deploy the backend."
-            exit 1
+          if [ -z "${RENDER_DEPLOY_HOOK}" ]; then
+            echo "RENDER_DEPLOY_HOOK not set — skipping CI trigger."
+            echo "Render should auto-deploy from the Blueprint when the repo is connected."
+            echo "Blueprint: https://dashboard.render.com/blueprint/new?repo=https://github.com/nclsfernando/umkm-food-saas-fixedd"
+            exit 0
           fi
-          echo "RAILWAY_TOKEN is set (value not shown)."
-
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
-      - name: Deploy to Railway
-        run: railway up --service backend
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          curl -fsS -X POST "${RENDER_DEPLOY_HOOK}"
+          echo "Render deploy hook triggered."
 
   # ── Deploy Frontend to Vercel ──────────────────────────────────────────────
-  # Runs even when deploy-backend fails so Vercel is not blocked by Railway.
+  # Runs even when deploy-backend fails so Vercel is not blocked by backend CI.
   deploy-frontend:
     name: Deploy Frontend → Vercel
     runs-on: ubuntu-latest

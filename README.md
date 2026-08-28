@@ -9,7 +9,7 @@ Aplikasi SaaS untuk UMKM kuliner yang berjualan di GoFood, GrabFood, dan ShopeeF
 | Frontend   | Next.js 15, TypeScript, Tailwind CSS, Recharts    |
 | Backend    | NestJS, Prisma ORM, PostgreSQL                    |
 | Deploy FE  | **Vercel** (Root Directory: `frontend`)           |
-| Deploy BE  | **Railway**                                       |
+| Deploy BE  | **Render** (Blueprint: `render.yaml`)             |
 
 ## Struktur Folder
 
@@ -22,10 +22,11 @@ umkm-food-saas/
 │   │   └── lib/           # API client, utils
 │   ├── vercel.json        # ← KRUSIAL: config Vercel
 │   └── package.json
-├── backend/               # NestJS API → deploy ke Railway
+├── backend/               # NestJS API → deploy ke Render (Docker)
 │   ├── src/               # Source TypeScript
 │   ├── prisma/            # Schema + seed
 │   └── package.json
+├── render.yaml            # Render Blueprint (API + PostgreSQL)
 ├── docker-compose.yml     # Untuk local development
 └── .github/workflows/     # CI/CD otomatis
 ```
@@ -48,10 +49,12 @@ umkm-food-saas/
 Root Directory: frontend
 ```
 
-**3. Set Environment Variables di Vercel**
+**3. Environment Variables**
+`frontend/.env.production` sudah berisi:
 ```
-NEXT_PUBLIC_API_URL = https://nama-backend-kamu.railway.app/api/v1
+NEXT_PUBLIC_API_URL=https://umkm-food-saas-api.onrender.com/api/v1
 ```
+Vercel Git build akan memakai nilai itu. Override di dashboard Vercel hanya jika perlu.
 
 **4. Deploy Settings (auto-detect, tapi pastikan):**
 ```
@@ -63,34 +66,40 @@ Install Command:  npm install
 
 ---
 
-## 🚂 Deploy ke Railway (Backend)
+## 🟦 Deploy ke Render (Backend)
 
-**1. Buat project baru di Railway**
-- https://railway.app/new → Deploy from GitHub Repo
+**1. Buat Blueprint dari repo**
+- https://dashboard.render.com/blueprint/new?repo=https://github.com/nclsfernando/umkm-food-saas-fixedd
+- File Blueprint: `render.yaml` di root repo (service `umkm-food-saas-api` + Postgres)
 
-**2. Set Root Directory di Railway**
-```
-Root Directory: backend
-```
-
-**3. Set Environment Variables di Railway:**
+**2. Environment (sudah di Blueprint):**
 ```
 NODE_ENV        = production
-PORT            = 4000
-DATABASE_URL    = (otomatis dari PostgreSQL service Railway)
-JWT_SECRET      = buat-secret-acak-minimal-32-karakter
+PORT            = 4000   # Render juga inject PORT; Nest membaca process.env.PORT
+DATABASE_URL    = (dari Render Postgres via fromDatabase)
+FRONTEND_URL    = https://umkm-food-saas-fixedd.vercel.app
+JWT_SECRET      = (generateValue di Blueprint)
 JWT_EXPIRES_IN  = 7d
-FRONTEND_URL    = https://nama-frontend-kamu.vercel.app
 ```
 
-**4. Tambah PostgreSQL service di Railway**
-- Klik "+ New" → Database → PostgreSQL
-- Railway otomatis inject `DATABASE_URL`
+**3. Docker**
+- `dockerfilePath: ./backend/Dockerfile`
+- `dockerContext: ./backend` (COPY paths di Dockerfile relatif ke folder backend)
+- Start: `npx prisma migrate deploy && node dist/src/main.js`
 
-**5. Jalankan seed setelah deploy:**
+**4. Health check**
+- Path: `/api/v1/health`
+- URL publik: `https://umkm-food-saas-api.onrender.com/api/v1/health`
+
+**5. Seed setelah deploy pertama (opsional):**
 ```bash
-railway run --service backend npx prisma db seed
+# Via Render Shell di dashboard service, dari working directory container:
+npx prisma db seed
 ```
+
+**6. CI (opsional)**
+- Render auto-deploy dari Git setelah Blueprint terhubung.
+- Opsional: set secret `RENDER_DEPLOY_HOOK` di GitHub Actions untuk `curl POST` ke deploy hook.
 
 ---
 

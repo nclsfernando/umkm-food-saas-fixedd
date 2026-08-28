@@ -1,0 +1,33 @@
+# Render Blueprint — NestJS API + PostgreSQL
+# Connect repo: https://dashboard.render.com/blueprint/new?repo=https://github.com/nclsfernando/umkm-food-saas-fixedd
+# Auto-deploys on push to the linked branch after Blueprint is created.
+
+databases:
+  - name: umkm-food-saas-db
+    plan: free
+    databaseName: umkm_food
+
+services:
+  - type: web
+    name: umkm-food-saas-api
+    runtime: docker
+    plan: free
+    # Dockerfile COPY paths assume backend/ as build context (not monorepo root)
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "4000"
+      - key: FRONTEND_URL
+        value: https://umkm-food-saas-fixedd.vercel.app
+      - key: DATABASE_URL
+        fromDatabase:
+          name: umkm-food-saas-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d

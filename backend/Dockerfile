@@ -31,4 +31,5 @@ RUN npx prisma generate --schema=./prisma/schema.prisma
 
 EXPOSE 4000
 
-CMD ["node", "dist/src/main.js"]
+# Run pending Prisma migrations, then start NestJS
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]
