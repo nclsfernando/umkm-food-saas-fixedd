@@ -1,9 +1,22 @@
 import axios, { AxiosError } from 'axios';
 
+/**
+ * Resolve API base URL for the browser client.
+ * - Relative `/api/v1` → same-origin Next.js Route Handlers (Vercel)
+ * - localhost → local NestJS
+ * - Absolute Railway/Zeabur/etc → ignored (stale Vercel env overrides must not win)
+ */
+export function resolveApiBaseUrl(raw = process.env.NEXT_PUBLIC_API_URL): string {
+  const env = raw?.trim();
+  if (!env) return '/api/v1';
+  if (env.startsWith('/')) return env;
+  if (/localhost|127\.0\.0\.1/.test(env)) return env;
+  return '/api/v1';
+}
+
 /** Default for dashboard/list calls. Import of large CSV uses IMPORT_TIMEOUT_MS. */
 const api = axios.create({
-  // Same-origin Next.js Route Handlers on Vercel; local Nest fallback for backend-only dev
-  baseURL: process.env.NEXT_PUBLIC_API_URL || '/api/v1',
+  baseURL: resolveApiBaseUrl(),
   timeout: 15000,
 });
 
@@ -48,7 +61,7 @@ export function formatApiError(err: unknown, fallback = 'Gagal'): string {
   if (status === 404) {
     return detail
       ? `API tidak ditemukan (404): ${detail}`
-      : 'API tidak ditemukan (404) — cek NEXT_PUBLIC_API_URL.';
+      : 'API tidak ditemukan (404).';
   }
   if (status === 413) {
     return detail || 'File terlalu besar (413).';
