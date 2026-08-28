@@ -5,43 +5,31 @@ on:
     branches: [main]
 
 jobs:
-  deploy-frontend:
-    name: Deploy Frontend+API → Vercel
+  # Vercel Git integration usually deploys the frontend automatically.
+  # This job only syncs DATABASE_URL when VERCEL_* secrets are present.
+  sync-vercel-env:
+    name: Sync DATABASE_URL → Vercel (optional)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Vercel CLI
-        run: npm install -g vercel@39
-
-      - name: Sync DATABASE_URL to Vercel (production)
+      - name: Sync env if Vercel token exists
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          set -e
-          if [ -z "$DATABASE_URL" ]; then
-            echo "DATABASE_URL secret missing — API routes need Postgres."
-            exit 1
+          if [ -z "$VERCEL_TOKEN" ] || [ -z "$DATABASE_URL" ]; then
+            echo "VERCEL_TOKEN or DATABASE_URL secret missing — skip sync."
+            echo "Rely on Vercel Git integration + dashboard env for DATABASE_URL."
+            exit 0
           fi
+          npm install -g vercel@39
           cd frontend
           vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
-          # Replace production DATABASE_URL without printing value
           vercel env rm DATABASE_URL production --yes --token="$VERCEL_TOKEN" || true
           printf '%s' "$DATABASE_URL" | vercel env add DATABASE_URL production --token="$VERCEL_TOKEN"
           vercel env rm NEXT_PUBLIC_API_URL production --yes --token="$VERCEL_TOKEN" || true
           printf '%s' '/api/v1' | vercel env add NEXT_PUBLIC_API_URL production --token="$VERCEL_TOKEN"
-
-      - name: Deploy to Vercel
-        run: |
-          cd frontend
-          vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
-          vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
-          vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          echo "Synced DATABASE_URL + NEXT_PUBLIC_API_URL to Vercel production."
