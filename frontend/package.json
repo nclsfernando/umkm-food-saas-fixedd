@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "umkm-food-frontend",
   "version": "1.0.0",
   "private": true,
@@ -7,10 +7,12 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "node ./scripts/ensure-prisma.js && next build",
     "start": "next start",
     "lint": "next lint",
-    "postinstall": "prisma generate"
+    "postinstall": "node ./scripts/ensure-prisma.js",
+    "db:migrate": "prisma migrate deploy",
+    "db:push": "prisma db push"
   },
   "dependencies": {
     "@prisma/client": "^5.10.2",

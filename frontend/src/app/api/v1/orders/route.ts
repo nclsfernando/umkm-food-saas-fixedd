@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createOrder, findAllOrders } from '@/lib/server/orders';
+import { requireDatabaseOr503 } from '@/lib/server/db-guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
+  const blocked = requireDatabaseOr503();
+  if (blocked) return blocked;
   try {
     const sp = req.nextUrl.searchParams;
     const data = await findAllOrders({
@@ -22,6 +25,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const blocked = requireDatabaseOr503();
+  if (blocked) return blocked;
   try {
     const body = await req.json();
     return NextResponse.json(await createOrder(body));
