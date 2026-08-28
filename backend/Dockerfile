@@ -31,5 +31,6 @@ RUN npx prisma generate --schema=./prisma/schema.prisma
 
 EXPOSE 4000
 
-# Run pending Prisma migrations, then start NestJS
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]
+# Neon: DIRECT_URL falls back to DATABASE_URL if unset (non-pooler or single URL)
+# migrate deploy needs migrations/ (included above); then start Nest on 0.0.0.0 via main.ts
+CMD ["sh", "-c", "export DIRECT_URL=\"${DIRECT_URL:-$DATABASE_URL}\" && npx prisma migrate deploy && node dist/src/main.js"]
