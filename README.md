@@ -78,11 +78,13 @@ Install Command:  npm install
 - Daftar/login: https://neon.tech
 - Buat project baru (tier gratis)
 - Copy **connection string pooled** (host biasanya berisi `-pooler`)
+- Juga copy **direct** (non-pooler) connection string untuk `DIRECT_URL`
 
 ### 2. Deploy API ke Zeabur
 - Daftar/login: https://zeabur.com (plan Free — **tidak perlu kartu**)
 - Buat Project → Add Service → **Deploy from GitHub**
 - Pilih repo: `nclsfernando/umkm-food-saas-fixedd`
+- Branch: `fix/zeabur-neon-backend` (atau `main` setelah merge)
 
 **Root Directory (pilih salah satu):**
 | Cara | Setting |
@@ -95,7 +97,8 @@ Install Command:  npm install
 | Variable       | Contoh / catatan |
 |----------------|------------------|
 | `PORT`         | Biarkan Zeabur inject, atau set `4000` (app membaca `PORT`) |
-| `DATABASE_URL` | URL Neon pooled dari langkah 1 |
+| `DATABASE_URL` | URL Neon **pooled** (host biasanya berisi `-pooler`) |
+| `DIRECT_URL`   | URL Neon **non-pooler** (untuk `prisma migrate deploy`). Jika kosong, Docker fallback ke `DATABASE_URL` |
 | `FRONTEND_URL` | `https://umkm-food-saas-fixedd.vercel.app` |
 | `NODE_ENV`     | `production` |
 | `JWT_SECRET`   | string acak panjang (≥32 karakter) |
@@ -135,9 +138,9 @@ cd umkm-food-saas-fixedd
 
 # 2. Backend
 cd backend
-cp .env.example .env     # edit DATABASE_URL & JWT_SECRET
+cp .env.example .env     # edit DATABASE_URL, DIRECT_URL & JWT_SECRET
 npm install
-npx prisma migrate dev
+npx prisma migrate deploy
 npx prisma db seed
 npm run start:dev        # http://localhost:4000
 
