@@ -95,7 +95,8 @@ Install Command:  npm install
 | Variable       | Contoh / catatan |
 |----------------|------------------|
 | `PORT`         | Biarkan Zeabur inject, atau set `4000` (app membaca `PORT`) |
-| `DATABASE_URL` | URL Neon pooled dari langkah 1 |
+| `DATABASE_URL` | URL Neon **pooled** (host biasanya berisi `-pooler`) |
+| `DIRECT_URL`   | URL Neon **non-pooler** (untuk `prisma migrate deploy`). Jika kosong, Docker fallback ke `DATABASE_URL` |
 | `FRONTEND_URL` | `https://umkm-food-saas-fixedd.vercel.app` |
 | `NODE_ENV`     | `production` |
 | `JWT_SECRET`   | string acak panjang (≥32 karakter) |

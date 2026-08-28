@@ -1,26 +1,30 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+
   constructor(private prisma: PrismaService) {}
 
-  async create(dto: CreateOrderDto) {
-    const { items, ...orderData } = dto;
+  async create(dto: CreateOrderDto | Record<string, any>) {
+    const { items, marketplace, orderDate, grossSales, discount, commission, netSales, status } = dto as any;
     return this.prisma.order.create({
       data: {
-        ...orderData,
-        grossSales: orderData.grossSales.toString(),
-        discount: (orderData.discount || 0).toString(),
-        commission: (orderData.commission || 0).toString(),
-        netSales: orderData.netSales.toString(),
+        marketplace,
+        orderDate: orderDate ? new Date(orderDate) : undefined,
+        grossSales: Number(grossSales).toString(),
+        discount: Number(discount || 0).toString(),
+        commission: Number(commission || 0).toString(),
+        netSales: Number(netSales).toString(),
+        status: status || undefined,
         items: items ? {
-          create: items.map(i => ({
+          create: items.map((i: any) => ({
             productName: i.productName,
             qty: i.qty,
-            unitPrice: i.unitPrice.toString(),
-            subtotal: i.subtotal.toString(),
+            unitPrice: Number(i.unitPrice).toString(),
+            subtotal: Number(i.subtotal).toString(),
           })),
         } : undefined,
       },
@@ -48,15 +52,24 @@ export class OrdersService {
 
   async importCsv(rows: any[]) {
     let created = 0, skipped = 0;
+    const errors: string[] = [];
     for (const row of rows) {
       try {
         const isDup = await this.isDuplicate(row);
         if (isDup) { skipped++; continue; }
         await this.create(row);
         created++;
-      } catch { skipped++; }
+      } catch (err: any) {
+        skipped++;
+        const msg = err?.message || String(err);
+        this.logger.warn(`Import row skipped: ${msg}`);
+        if (errors.length < 5) errors.push(msg);
+      }
     }
-    return { created, skipped };
+    if (created === 0 && skipped > 0 && errors.length > 0) {
+      this.logger.error(`Import selesai tanpa create. Contoh error: ${errors.join(' | ')}`);
+    }
+    return { created, skipped, ...(errors.length ? { errors } : {}) };
   }
 
   private async isDuplicate(row: any): Promise<boolean> {
@@ -94,7 +107,7 @@ export class OrdersService {
       where: {
         marketplace: row.marketplace,
         orderDate: { gte: dayStart, lte: dayEnd },
-        grossSales: row.grossSales.toString(),
+        grossSales: Number(row.grossSales).toString(),
       },
       include: { items: true },
     });

@@ -2,14 +2,13 @@
   "version": 2,
   "framework": "nextjs",
   "buildCommand": "npm run build",
-  "outputDirectory": ".next",
   "installCommand": "npm install",
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/$1"
+  "functions": {
+    "src/app/api/v1/orders/import/**/*": {
+      "maxDuration": 60,
+      "memory": 1024
     }
-  ],
+  },
   "headers": [
     {
       "source": "/api/(.*)",

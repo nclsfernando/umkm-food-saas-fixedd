@@ -2,7 +2,8 @@ import axios, { AxiosError } from 'axios';
 
 /** Default for dashboard/list calls. Import of large CSV uses IMPORT_TIMEOUT_MS. */
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1',
+  // Same-origin Next.js Route Handlers on Vercel; local Nest fallback for backend-only dev
+  baseURL: process.env.NEXT_PUBLIC_API_URL || '/api/v1',
   timeout: 15000,
 });
 
