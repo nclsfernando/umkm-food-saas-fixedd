@@ -1,9 +1,71 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 
+/** Default for dashboard/list calls. Import of large CSV uses IMPORT_TIMEOUT_MS. */
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1',
   timeout: 15000,
 });
+
+/** Multi-month GrabFood summary can take longer than the default 15s. */
+export const IMPORT_TIMEOUT_MS = 90_000;
+
+/**
+ * Turn axios / NestJS errors into short Indonesian UI text.
+ * Handles network, timeout, HTTP status, and Nest `message` string | string[].
+ */
+export function formatApiError(err: unknown, fallback = 'Gagal'): string {
+  if (!axios.isAxiosError(err)) {
+    if (err instanceof Error && err.message) return err.message;
+    return fallback;
+  }
+
+  const ax = err as AxiosError<{ message?: string | string[]; error?: string; statusCode?: number }>;
+
+  if (ax.code === 'ECONNABORTED' || /timeout/i.test(ax.message || '')) {
+    return 'Timeout — file terlalu besar atau server lambat. Coba lagi.';
+  }
+
+  if (!ax.response) {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      return 'Offline — cek koneksi internet.';
+    }
+    return 'Tidak terhubung ke API (server mati / URL salah / CORS).';
+  }
+
+  const status = ax.response.status;
+  const data = ax.response.data;
+  let detail = '';
+
+  if (data?.message != null) {
+    detail = Array.isArray(data.message)
+      ? data.message.filter(Boolean).join('; ')
+      : String(data.message);
+  } else if (typeof data?.error === 'string') {
+    detail = data.error;
+  }
+
+  if (status === 404) {
+    return detail
+      ? `API tidak ditemukan (404): ${detail}`
+      : 'API tidak ditemukan (404) — cek NEXT_PUBLIC_API_URL.';
+  }
+  if (status === 413) {
+    return detail || 'File terlalu besar (413).';
+  }
+  if (status === 502 || status === 503 || status === 504) {
+    return detail
+      ? `Server API down (${status}): ${detail}`
+      : `Server API down (${status}).`;
+  }
+  if (status >= 500) {
+    return detail ? `Error server (${status}): ${detail}` : `Error server (${status}).`;
+  }
+  if (status >= 400) {
+    return detail ? `${detail} (${status})` : `Permintaan ditolak (${status}).`;
+  }
+
+  return detail || `${fallback} (${status})`;
+}
 
 export default api;
 // Dashboard
