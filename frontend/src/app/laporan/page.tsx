@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from 'react';
 import api, { formatApiError } from '@/lib/api';
 import { formatRupiah } from '@/lib/utils';
 import { usePeriod } from '@/hooks/usePeriod';
+import { downloadAoaAsXlsx, printHtmlAsPdf } from '@/lib/client-export';
 
 type ViewMode = 'daily' | 'monthly';
 const MP = ['GrabFood', 'GoFood', 'ShopeeFood'];
@@ -102,21 +103,22 @@ export default function LaporanPage() {
   const downloadXlsx = async () => {
     setDownloading('xlsx');
     try {
-      const XLSX = await import('xlsx');
       const rows = buildRows();
-      const wsData = [
-        [`Laporan Marketplace - ${mode === 'daily' ? label : `Tahun ${year}`}`],
-        [],
-        [mode === 'daily' ? 'Tanggal' : 'Bulan', 'GrabFood', 'GoFood', 'ShopeeFood', 'Total'],
-        ...rows.map(r => [r.label, r.values['GrabFood']||0, r.values['GoFood']||0, r.values['ShopeeFood']||0, r.values['total']||0]),
-        [],
-        ['GRAND TOTAL', grandTotal['GrabFood']||0, grandTotal['GoFood']||0, grandTotal['ShopeeFood']||0, grandTotal['total']||0],
-      ];
-      const ws = XLSX.utils.aoa_to_sheet(wsData);
-      ws['!cols'] = [{ wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }];
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Laporan');
-      XLSX.writeFile(wb, `Laporan_Marketplace_${mode === 'daily' ? from+'_'+to : year}.xlsx`);
+      await downloadAoaAsXlsx(
+        [
+          [`Laporan Marketplace - ${mode === 'daily' ? label : `Tahun ${year}`}`],
+          [],
+          [mode === 'daily' ? 'Tanggal' : 'Bulan', 'GrabFood', 'GoFood', 'ShopeeFood', 'Total'],
+          ...rows.map(r => [r.label, r.values['GrabFood']||0, r.values['GoFood']||0, r.values['ShopeeFood']||0, r.values['total']||0]),
+          [],
+          ['GRAND TOTAL', grandTotal['GrabFood']||0, grandTotal['GoFood']||0, grandTotal['ShopeeFood']||0, grandTotal['total']||0],
+        ],
+        `Laporan_Marketplace_${mode === 'daily' ? from+'_'+to : year}`,
+        {
+          sheetName: 'Laporan',
+          cols: [{ wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }],
+        },
+      );
     } finally { setDownloading(null); }
   };
 
@@ -169,13 +171,9 @@ export default function LaporanPage() {
         </table>
         <p style="margin-top:16px;color:#9ca3af;font-size:9px">Digenerate oleh UMKM Food · ${new Date().toLocaleString('id-ID')}</p>
         </body></html>`;
-
-      const win = window.open('', '_blank');
-      if (win) {
-        win.document.write(html);
-        win.document.close();
-        setTimeout(() => { win.print(); }, 500);
-      }
+      printHtmlAsPdf(html);
+    } catch {
+      /* popup blocked or print failed */
     } finally { setDownloading(null); }
   };
 
