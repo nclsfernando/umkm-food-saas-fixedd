@@ -1,8 +1,10 @@
 import { prisma } from '@/lib/db';
+import { parseDayEnd, parseDayStart } from '@/lib/period';
+import { calculateHpp } from '@/lib/server/hpp';
 
 export async function profitLoss(from: string, to: string) {
-  const dateFilter = { gte: new Date(from), lte: new Date(to) };
-  const [orderAgg, expenses, items] = await Promise.all([
+  const dateFilter = { gte: parseDayStart(from), lte: parseDayEnd(to) };
+  const [orderAgg, expenses, hpp] = await Promise.all([
     prisma.order.aggregate({
       where: { status: 'COMPLETED', orderDate: dateFilter },
       _sum: { grossSales: true, discount: true, commission: true, netSales: true },
@@ -12,17 +14,13 @@ export async function profitLoss(from: string, to: string) {
       where: { expenseDate: dateFilter },
       select: { category: true, amount: true },
     }),
-    prisma.orderItem.findMany({
-      where: { order: { status: 'COMPLETED', orderDate: dateFilter } },
-      select: { unitPrice: true, qty: true },
-    }),
+    calculateHpp(dateFilter.gte, dateFilter.lte),
   ]);
 
   const grossSales = Number(orderAgg._sum.grossSales ?? 0);
   const discount = Number(orderAgg._sum.discount ?? 0);
   const commission = Number(orderAgg._sum.commission ?? 0);
   const netSales = Number(orderAgg._sum.netSales ?? 0);
-  const hpp = items.reduce((acc, i) => acc + Number(i.unitPrice) * i.qty, 0);
   const totalExpenses = expenses.reduce((acc, e) => acc + Number(e.amount), 0);
   const grossProfit = netSales - hpp;
   const netProfit = grossProfit - totalExpenses;
@@ -46,7 +44,10 @@ export async function profitLoss(from: string, to: string) {
 export async function marketplaceSummary(from: string, to: string) {
   return prisma.order.groupBy({
     by: ['marketplace'],
-    where: { status: 'COMPLETED', orderDate: { gte: new Date(from), lte: new Date(to) } },
+    where: {
+      status: 'COMPLETED',
+      orderDate: { gte: parseDayStart(from), lte: parseDayEnd(to) },
+    },
     _count: { id: true },
     _sum: { grossSales: true, commission: true, netSales: true },
   });

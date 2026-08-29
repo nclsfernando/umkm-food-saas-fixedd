@@ -1,22 +1,30 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { formatApiError, reportsApi } from '@/lib/api';
-import { formatRupiah, thisMonthRange } from '@/lib/utils';
+import { formatRupiah } from '@/lib/utils';
+import { usePeriod } from '@/hooks/usePeriod';
+import PeriodFilter from '@/components/PeriodFilter';
 import { FileText, TrendingUp, TrendingDown } from 'lucide-react';
 
 export default function ReportsPage() {
-  const { from: df, to: dt } = thisMonthRange();
-  const [from, setFrom] = useState(df);
-  const [to, setTo] = useState(dt);
+  const { from, to, ready, setPeriod, label } = usePeriod();
+  const [draftFrom, setDraftFrom] = useState(from);
+  const [draftTo, setDraftTo] = useState(to);
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const load = async () => {
+  useEffect(() => {
+    if (!ready) return;
+    setDraftFrom(from);
+    setDraftTo(to);
+  }, [ready, from, to]);
+
+  const load = async (f = from, t = to) => {
     setLoading(true);
     setError('');
     try {
-      const res = await reportsApi.profitLoss(from, to);
+      const res = await reportsApi.profitLoss(f, t);
       setReport(res.data);
     } catch (err) {
       setReport(null);
@@ -26,9 +34,19 @@ export default function ReportsPage() {
     }
   };
 
-  const Row = ({ label, value, highlight, negative }: { label: string; value: number; highlight?: boolean; negative?: boolean }) => (
+  useEffect(() => {
+    if (!ready) return;
+    load(from, to);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, from, to]);
+
+  const applyPeriod = () => {
+    setPeriod(draftFrom, draftTo);
+  };
+
+  const Row = ({ label: rowLabel, value, highlight, negative }: { label: string; value: number; highlight?: boolean; negative?: boolean }) => (
     <div className={`flex justify-between py-2.5 ${highlight ? 'border-t border-gray-200 mt-1 pt-3' : 'border-b border-gray-50'}`}>
-      <span className={`text-sm ${highlight ? 'font-bold text-gray-900' : 'text-gray-600'}`}>{label}</span>
+      <span className={`text-sm ${highlight ? 'font-bold text-gray-900' : 'text-gray-600'}`}>{rowLabel}</span>
       <span className={`text-sm font-medium ${negative ? 'text-red-600' : highlight ? (value >= 0 ? 'text-green-700 font-bold text-base' : 'text-red-700 font-bold text-base') : 'text-gray-900'}`}>
         {negative ? `(${formatRupiah(value)})` : formatRupiah(value)}
       </span>
@@ -42,25 +60,24 @@ export default function ReportsPage() {
         <p className="text-gray-500 text-sm mt-1">Laba rugi bisnis kamu</p>
       </div>
 
-      <div className="card">
-        <div className="flex flex-wrap gap-3 items-end">
-          <div>
-            <label className="label">Dari Tanggal</label>
-            <input type="date" className="input w-auto" value={from} onChange={e => setFrom(e.target.value)} />
-          </div>
-          <div>
-            <label className="label">Sampai Tanggal</label>
-            <input type="date" className="input w-auto" value={to} onChange={e => setTo(e.target.value)} />
-          </div>
-          <button onClick={load} disabled={loading} className="btn-primary flex items-center gap-2">
-            <FileText className="w-4 h-4" />
-            {loading ? 'Memuat...' : 'Generate Laporan'}
-          </button>
-        </div>
-      </div>
+      <PeriodFilter
+        from={draftFrom}
+        to={draftTo}
+        onFromChange={setDraftFrom}
+        onToChange={setDraftTo}
+        onApply={applyPeriod}
+        applying={loading}
+        applyLabel="Generate Laporan"
+      />
 
       {error && (
         <div className="card border-red-200 bg-red-50 text-red-700 text-sm">{error}</div>
+      )}
+
+      {loading && !report && (
+        <div className="flex items-center justify-center h-40">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500" />
+        </div>
       )}
 
       {report && (
@@ -69,7 +86,9 @@ export default function ReportsPage() {
             <h2 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-green-600" /> Laporan Laba Rugi
             </h2>
-            <p className="text-xs text-gray-400 mb-4">{report.period.from} s/d {report.period.to} · {report.orders} pesanan</p>
+            <p className="text-xs text-gray-400 mb-4">
+              {label} · {report.orders} pesanan
+            </p>
 
             <div className="space-y-0">
               <p className="text-xs font-semibold text-gray-400 uppercase mb-2">Pendapatan</p>
@@ -81,6 +100,11 @@ export default function ReportsPage() {
               <p className="text-xs font-semibold text-gray-400 uppercase mb-2 mt-4">Harga Pokok Penjualan</p>
               <Row label="HPP (Harga Modal)" value={report.cogs.hpp} negative />
               <Row label="Laba Kotor" value={report.grossProfit} highlight />
+              {report.cogs.hpp === 0 && (
+                <p className="text-xs text-gray-400 mt-1 mb-2">
+                  HPP dari modal produk (jika diisi). Import marketplace tanpa HPP → laba = net sales − biaya ops.
+                </p>
+              )}
 
               <p className="text-xs font-semibold text-gray-400 uppercase mb-2 mt-4">Biaya Operasional</p>
               {Object.entries(report.operatingExpenses.byCategory || {}).map(([cat, amt]) => (
@@ -88,7 +112,7 @@ export default function ReportsPage() {
               ))}
               <Row label="Total Biaya Ops" value={report.operatingExpenses.total} negative />
 
-              <Row label="🎯 LABA BERSIH" value={report.netProfit} highlight />
+              <Row label="LABA BERSIH" value={report.netProfit} highlight />
             </div>
           </div>
 
@@ -96,13 +120,13 @@ export default function ReportsPage() {
             <h2 className="font-bold text-gray-900 mb-4">Ringkasan Cepat</h2>
             <div className="space-y-4">
               {[
-                { label: 'Net Sales', value: report.revenue.netSales, color: 'green' },
-                { label: 'Total HPP', value: report.cogs.hpp, color: 'red' },
-                { label: 'Total Biaya Ops', value: report.operatingExpenses.total, color: 'orange' },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <span className="text-sm text-gray-700">{label}</span>
-                  <span className={`font-bold text-${color}-600`}>{formatRupiah(value)}</span>
+                { label: 'Net Sales', value: report.revenue.netSales, tone: 'text-green-600' },
+                { label: 'Total HPP', value: report.cogs.hpp, tone: 'text-red-600' },
+                { label: 'Total Biaya Ops', value: report.operatingExpenses.total, tone: 'text-orange-600' },
+              ].map(({ label: l, value, tone }) => (
+                <div key={l} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <span className="text-sm text-gray-700">{l}</span>
+                  <span className={`font-bold ${tone}`}>{formatRupiah(value)}</span>
                 </div>
               ))}
               <div className={`flex items-center justify-between p-4 rounded-xl ${report.netProfit >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
@@ -125,7 +149,7 @@ export default function ReportsPage() {
       {!report && !loading && (
         <div className="card text-center py-16">
           <FileText className="w-12 h-12 text-gray-200 mx-auto mb-4" />
-          <p className="text-gray-400">Pilih rentang tanggal dan klik "Generate Laporan"</p>
+          <p className="text-gray-400">Pilih rentang tanggal dan klik &quot;Generate Laporan&quot;</p>
         </div>
       )}
     </div>

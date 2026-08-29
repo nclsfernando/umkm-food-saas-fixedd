@@ -8,8 +8,10 @@ export class DashboardController {
   constructor(private dashboard: DashboardService) {}
 
   @Get('summary')
-  @ApiOperation({ summary: 'Ringkasan hari ini, minggu, bulan' })
-  summary() { return this.dashboard.getSummary(); }
+  @ApiOperation({ summary: 'Ringkasan hari ini, minggu, bulan (opsional from/to untuk period bersama)' })
+  summary(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.dashboard.getSummary(from, to);
+  }
 
   @Get('marketplace')
   @ApiOperation({ summary: 'Breakdown per marketplace' })

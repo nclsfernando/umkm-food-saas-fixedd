@@ -33,3 +33,10 @@ export function thisMonthRange() {
   const to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   return { from: toLocalDateString(from), to: toLocalDateString(to) };
 }
+
+/** @deprecated Prefer yearToDateRange / usePeriod from `@/lib/period`. */
+export function yearToDateRange() {
+  const now = new Date();
+  const from = new Date(now.getFullYear(), 0, 1);
+  return { from: toLocalDateString(from), to: toLocalDateString(now) };
+}

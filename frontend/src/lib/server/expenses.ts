@@ -73,10 +73,16 @@ export async function removeExpense(id: string) {
 }
 
 export async function expenseSummary(from: string, to: string) {
+  const { parseDayEnd, parseDayStart } = await import('@/lib/period');
   const result = await prisma.expense.groupBy({
     by: ['category'],
-    where: { expenseDate: { gte: new Date(from), lte: new Date(to) } },
+    where: { expenseDate: { gte: parseDayStart(from), lte: parseDayEnd(to) } },
     _sum: { amount: true },
   });
-  return result.map((r) => ({ category: r.category, total: r._sum.amount ?? 0 }));
+  const byCategory = result.map((r) => ({
+    category: r.category,
+    total: Number(r._sum.amount ?? 0),
+  }));
+  const total = byCategory.reduce((a, r) => a + r.total, 0);
+  return { total, byCategory };
 }

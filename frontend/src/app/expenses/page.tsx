@@ -1,43 +1,80 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { expensesApi, formatApiError } from '@/lib/api';
-import { formatRupiah, formatDate, thisMonthRange, toLocalDateString } from '@/lib/utils';
+import { formatRupiah, formatDate, toLocalDateString } from '@/lib/utils';
+import { usePeriod } from '@/hooks/usePeriod';
+import PeriodFilter from '@/components/PeriodFilter';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 
 const CATEGORIES = ['Bahan Baku', 'Kemasan', 'Gas & Listrik', 'Gaji', 'Transport', 'Marketing', 'Sewa', 'Lainnya'];
 
 export default function ExpensesPage() {
-  const { from: df, to: dt } = thisMonthRange();
+  const { from, to, ready, setPeriod, label } = usePeriod();
+  const [draftFrom, setDraftFrom] = useState(from);
+  const [draftTo, setDraftTo] = useState(to);
   const [expenses, setExpenses] = useState<any[]>([]);
-  const [total, setTotal] = useState(0);
-  const [from, setFrom] = useState(df);
-  const [to, setTo] = useState(dt);
+  const [summaryTotal, setSummaryTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState({ description: '', category: '', amount: '', expenseDate: toLocalDateString(new Date()) });
 
-  const load = async () => {
+  useEffect(() => {
+    if (!ready) return;
+    setDraftFrom(from);
+    setDraftTo(to);
+  }, [ready, from, to]);
+
+  const load = async (f = from, t = to) => {
     setLoading(true);
     setError('');
     try {
-      const res = await expensesApi.list({ from, to, limit: 100 });
-      setExpenses(res.data.data);
-      setTotal(res.data.total);
+      const [listRes, sumRes] = await Promise.all([
+        expensesApi.list({ from: f, to: t, limit: 100 }),
+        expensesApi.summary(f, t),
+      ]);
+      setExpenses(listRes.data.data);
+      const data = sumRes.data;
+      const totalFromSummary =
+        typeof data?.total === 'number'
+          ? data.total
+          : Array.isArray(data)
+            ? data.reduce((a: number, r: any) => a + Number(r.total ?? r._sum?.amount ?? 0), 0)
+            : Array.isArray(data?.byCategory)
+              ? data.byCategory.reduce((a: number, r: any) => a + Number(r.total ?? 0), 0)
+              : 0;
+      setSummaryTotal(Number(totalFromSummary) || 0);
     } catch (err) {
       setExpenses([]);
-      setTotal(0);
+      setSummaryTotal(0);
       setError(formatApiError(err, 'Gagal memuat biaya'));
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    if (!ready) return;
+    load(from, to);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, from, to]);
 
-  const openAdd = () => { setEditing(null); setForm({ description: '', category: '', amount: '', expenseDate: toLocalDateString(new Date()) }); setShowForm(true); };
-  const openEdit = (e: any) => { setEditing(e); setForm({ description: e.description, category: e.category, amount: e.amount, expenseDate: e.expenseDate?.split('T')[0] }); setShowForm(true); };
+  const openAdd = () => {
+    setEditing(null);
+    setForm({ description: '', category: '', amount: '', expenseDate: toLocalDateString(new Date()) });
+    setShowForm(true);
+  };
+  const openEdit = (e: any) => {
+    setEditing(e);
+    setForm({
+      description: e.description,
+      category: e.category,
+      amount: e.amount,
+      expenseDate: e.expenseDate?.split('T')[0],
+    });
+    setShowForm(true);
+  };
 
   const handleSave = async () => {
     try {
@@ -62,24 +99,30 @@ export default function ExpensesPage() {
   };
 
   const totalAmount = expenses.reduce((acc, e) => acc + Number(e.amount), 0);
+  const displayTotal = summaryTotal > 0 ? summaryTotal : totalAmount;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Biaya Operasional</h1>
-          <p className="text-gray-500 text-sm mt-1">Total: {formatRupiah(totalAmount)}</p>
+          <p className="text-gray-500 text-sm mt-1">
+            {label} · Total: {formatRupiah(displayTotal)}
+          </p>
         </div>
         <button onClick={openAdd} className="btn-primary flex items-center gap-2 self-start sm:self-auto">
           <Plus className="w-4 h-4" /> Tambah Biaya
         </button>
       </div>
 
-      <div className="flex flex-wrap gap-3">
-        <input type="date" className="input w-auto" value={from} onChange={e => setFrom(e.target.value)} />
-        <input type="date" className="input w-auto" value={to} onChange={e => setTo(e.target.value)} />
-        <button onClick={load} className="btn-primary">Tampilkan</button>
-      </div>
+      <PeriodFilter
+        from={draftFrom}
+        to={draftTo}
+        onFromChange={setDraftFrom}
+        onToChange={setDraftTo}
+        onApply={() => setPeriod(draftFrom, draftTo)}
+        applying={loading}
+      />
 
       {error && (
         <div className="card border-red-200 bg-red-50 text-red-700 text-sm">{error}</div>

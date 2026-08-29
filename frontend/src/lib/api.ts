@@ -84,7 +84,9 @@ export function formatApiError(err: unknown, fallback = 'Gagal'): string {
 export default api;
 // Dashboard
 export const dashboardApi = {
-  summary: () => api.get('/dashboard/summary'),
+  /** Optional from/to scopes month metrics to the shared Dashboard/Biaya/Laporan period. */
+  summary: (from?: string, to?: string) =>
+    api.get('/dashboard/summary', { params: from && to ? { from, to } : undefined }),
   marketplace: (from: string, to: string) => api.get('/dashboard/marketplace', { params: { from, to } }),
   dailyChart: (year: number, month: number) => api.get('/dashboard/chart/daily', { params: { year, month } }),
   topProducts: (from: string, to: string) => api.get('/dashboard/top-products', { params: { from, to } }),

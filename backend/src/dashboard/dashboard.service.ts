@@ -7,33 +7,46 @@ import Decimal from 'decimal.js';
 export class DashboardService {
   constructor(private prisma: PrismaService) {}
 
-  async getSummary() {
+  /**
+   * Optional `from`/`to` scopes the main KPI block so Dashboard / Biaya / Laporan
+   * can share one period. Without params, defaults to year-to-date (same as FE).
+   */
+  async getSummary(from?: string, to?: string) {
     const today = dayjs().startOf('day').toDate();
     const todayEnd = dayjs().endOf('day').toDate();
     const weekStart = dayjs().subtract(6, 'day').startOf('day').toDate();
-    const monthStart = dayjs().subtract(29, 'day').startOf('day').toDate();
-    const monthEnd = todayEnd;
+    const periodFrom = from
+      ? dayjs(from).startOf('day').toDate()
+      : dayjs().startOf('year').toDate();
+    const periodTo = to ? dayjs(to).endOf('day').toDate() : todayEnd;
+    const periodFromLabel = from ?? dayjs(periodFrom).format('YYYY-MM-DD');
+    const periodToLabel = to ?? dayjs(periodTo).format('YYYY-MM-DD');
 
-    const [todayOrders, weekOrders, monthOrders, monthExpenses, pendingSettlement] = await Promise.all([
+    const [todayOrders, weekOrders, periodOrders, periodExpenses, pendingSettlement] = await Promise.all([
       this.aggregateOrders(today, todayEnd),
       this.aggregateOrders(weekStart, todayEnd),
-      this.aggregateOrders(monthStart, monthEnd),
-      this.aggregateExpenses(monthStart, monthEnd),
+      this.aggregateOrders(periodFrom, periodTo),
+      this.aggregateExpenses(periodFrom, periodTo),
       this.prisma.settlement.aggregate({ where: { status: 'PENDING' }, _sum: { expectedAmount: true } }),
     ]);
 
-    const monthHpp = await this.calculateHpp(monthStart, monthEnd);
+    const periodHpp = await this.calculateHpp(periodFrom, periodTo);
+    const periodBlock = {
+      from: periodFromLabel,
+      to: periodToLabel,
+      ...this.buildPeriod(periodOrders),
+      hpp: periodHpp,
+      expenses: periodExpenses,
+      grossProfit: new Decimal(periodOrders.netSales).minus(periodHpp).toNumber(),
+      netProfit: new Decimal(periodOrders.netSales).minus(periodHpp).minus(periodExpenses).toNumber(),
+    };
 
     return {
-      today: { omzet: monthOrders.grossSales, ...this.buildPeriod(todayOrders) },
+      today: { omzet: periodOrders.grossSales, ...this.buildPeriod(todayOrders) },
       week: this.buildPeriod(weekOrders),
-      month: {
-        ...this.buildPeriod(monthOrders),
-        hpp: monthHpp,
-        expenses: monthExpenses,
-        grossProfit: new Decimal(monthOrders.netSales).minus(monthHpp).toNumber(),
-        netProfit: new Decimal(monthOrders.netSales).minus(monthHpp).minus(monthExpenses).toNumber(),
-      },
+      period: periodBlock,
+      /** Alias for older clients that read `month` as the main KPI block. */
+      month: periodBlock,
       pendingSettlement: pendingSettlement._sum.expectedAmount ?? 0,
     };
   }
@@ -164,12 +177,23 @@ export class DashboardService {
     return Number(agg._sum.amount ?? 0);
   }
 
+  /** HPP from Product catalog only — never use OrderItem.unitPrice (marketplace unitPrice ≈ gross sales). */
   private async calculateHpp(from: Date, to: Date) {
-    const items = await this.prisma.orderItem.findMany({
-      where: { order: { status: 'COMPLETED', orderDate: { gte: from, lte: to } } },
-      select: { unitPrice: true, qty: true },
-    });
-    return items.reduce((acc, i) => acc + Number(i.unitPrice) * i.qty, 0);
+    const [items, products] = await Promise.all([
+      this.prisma.orderItem.findMany({
+        where: { order: { status: 'COMPLETED', orderDate: { gte: from, lte: to } } },
+        select: { productName: true, qty: true },
+      }),
+      this.prisma.product.findMany({ select: { name: true, hpp: true } }),
+    ]);
+    const hppByName = new Map(
+      products.map((p) => [p.name.trim().toLowerCase(), Number(p.hpp)]),
+    );
+    return items.reduce((acc, i) => {
+      const unitCost = hppByName.get(i.productName.trim().toLowerCase());
+      if (unitCost == null || !Number.isFinite(unitCost) || unitCost <= 0) return acc;
+      return acc + unitCost * i.qty;
+    }, 0);
   }
 
   private buildPeriod(agg: any) {

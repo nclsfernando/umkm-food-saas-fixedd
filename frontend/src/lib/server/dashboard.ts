@@ -1,4 +1,7 @@
 import { prisma } from '@/lib/db';
+import { parseDayEnd, parseDayStart } from '@/lib/period';
+import { toLocalDateString } from '@/lib/utils';
+import { calculateHpp } from '@/lib/server/hpp';
 
 function startOfDay(d = new Date()) {
   const x = new Date(d);
@@ -34,14 +37,6 @@ async function aggregateExpenses(from: Date, to: Date) {
   return Number(agg._sum.amount ?? 0);
 }
 
-async function calculateHpp(from: Date, to: Date) {
-  const items = await prisma.orderItem.findMany({
-    where: { order: { status: 'COMPLETED', orderDate: { gte: from, lte: to } } },
-    select: { unitPrice: true, qty: true },
-  });
-  return items.reduce((acc, i) => acc + Number(i.unitPrice) * i.qty, 0);
-}
-
 function buildPeriod(agg: Awaited<ReturnType<typeof aggregateOrders>>) {
   return {
     orders: agg.count,
@@ -52,31 +47,48 @@ function buildPeriod(agg: Awaited<ReturnType<typeof aggregateOrders>>) {
   };
 }
 
-export async function getSummary() {
+/**
+ * Dashboard summary.
+ * Optional `from`/`to` (YYYY-MM-DD) scopes the main KPI block.
+ * Default without params: start of year → today (same as shared FE period).
+ */
+export async function getSummary(fromStr?: string, toStr?: string) {
   const today = startOfDay();
   const todayEnd = endOfDay();
   const weekStart = startOfDay(new Date(Date.now() - 6 * 86400000));
-  const monthStart = startOfDay(new Date(Date.now() - 29 * 86400000));
 
-  const [todayOrders, weekOrders, monthOrders, monthExpenses, pendingSettlement] = await Promise.all([
-    aggregateOrders(today, todayEnd),
-    aggregateOrders(weekStart, todayEnd),
-    aggregateOrders(monthStart, todayEnd),
-    aggregateExpenses(monthStart, todayEnd),
-    prisma.settlement.aggregate({ where: { status: 'PENDING' }, _sum: { expectedAmount: true } }),
-  ]);
-  const monthHpp = await calculateHpp(monthStart, todayEnd);
+  const ytdFrom = startOfDay(new Date(new Date().getFullYear(), 0, 1));
+  const periodFrom = fromStr ? parseDayStart(fromStr) : ytdFrom;
+  const periodTo = toStr ? parseDayEnd(toStr) : todayEnd;
+  const periodFromLabel = fromStr ?? toLocalDateString(periodFrom);
+  const periodToLabel = toStr ?? toLocalDateString(today);
+
+  const [todayOrders, weekOrders, periodOrders, periodExpenses, periodHpp, pendingSettlement] =
+    await Promise.all([
+      aggregateOrders(today, todayEnd),
+      aggregateOrders(weekStart, todayEnd),
+      aggregateOrders(periodFrom, periodTo),
+      aggregateExpenses(periodFrom, periodTo),
+      calculateHpp(periodFrom, periodTo),
+      prisma.settlement.aggregate({ where: { status: 'PENDING' }, _sum: { expectedAmount: true } }),
+    ]);
+
+  const periodBlock = {
+    from: periodFromLabel,
+    to: periodToLabel,
+    ...buildPeriod(periodOrders),
+    hpp: periodHpp,
+    expenses: periodExpenses,
+    grossProfit: periodOrders.netSales - periodHpp,
+    netProfit: periodOrders.netSales - periodHpp - periodExpenses,
+  };
 
   return {
-    today: { omzet: monthOrders.grossSales, ...buildPeriod(todayOrders) },
+    today: { omzet: periodOrders.grossSales, ...buildPeriod(todayOrders) },
     week: buildPeriod(weekOrders),
-    month: {
-      ...buildPeriod(monthOrders),
-      hpp: monthHpp,
-      expenses: monthExpenses,
-      grossProfit: monthOrders.netSales - monthHpp,
-      netProfit: monthOrders.netSales - monthHpp - monthExpenses,
-    },
+    period: periodBlock,
+    /** Alias for older clients that read `month` as the main KPI block. */
+    month: periodBlock,
     pendingSettlement: pendingSettlement._sum.expectedAmount ?? 0,
   };
 }
@@ -84,7 +96,10 @@ export async function getSummary() {
 export async function getMarketplaceBreakdown(from: string, to: string) {
   const results = await prisma.order.groupBy({
     by: ['marketplace'],
-    where: { status: 'COMPLETED', orderDate: { gte: new Date(from), lte: new Date(to) } },
+    where: {
+      status: 'COMPLETED',
+      orderDate: { gte: parseDayStart(from), lte: parseDayEnd(to) },
+    },
     _count: { id: true },
     _sum: { grossSales: true, commission: true, netSales: true },
   });
@@ -113,7 +128,12 @@ export async function getDailyChart(year: number, month: number) {
 export async function getTopProducts(from: string, to: string, limit = 10) {
   return prisma.orderItem.groupBy({
     by: ['productName'],
-    where: { order: { status: 'COMPLETED', orderDate: { gte: new Date(from), lte: new Date(to) } } },
+    where: {
+      order: {
+        status: 'COMPLETED',
+        orderDate: { gte: parseDayStart(from), lte: parseDayEnd(to) },
+      },
+    },
     _sum: { qty: true, subtotal: true },
     orderBy: { _sum: { qty: 'desc' } },
     take: limit,
@@ -152,8 +172,8 @@ function pivotByMarketplace(rows: any[], dateKey: string) {
 }
 
 export async function getReportByDate(from: string, to: string) {
-  const fromDate = from ? new Date(from) : new Date('2000-01-01');
-  const toDate = to ? new Date(to) : new Date('2099-12-31');
+  const fromDate = from ? parseDayStart(from) : new Date('2000-01-01');
+  const toDate = to ? parseDayEnd(to) : new Date('2099-12-31');
   const rows = await prisma.$queryRaw<any[]>`
     SELECT 
       DATE("orderDate") as tanggal,
