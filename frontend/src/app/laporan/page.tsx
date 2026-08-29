@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useState, useRef } from 'react';
 import api, { formatApiError } from '@/lib/api';
-import { formatRupiah, toLocalDateString } from '@/lib/utils';
+import { formatRupiah } from '@/lib/utils';
+import { usePeriod } from '@/hooks/usePeriod';
 
 type ViewMode = 'daily' | 'monthly';
 const MP = ['GrabFood', 'GoFood', 'ShopeeFood'];
@@ -11,23 +12,30 @@ const MP_COLOR: Record<string, string> = {
 function fmt(v: number) { return v > 0 ? formatRupiah(v) : '-'; }
 
 export default function LaporanPage() {
-  const now = new Date();
+  const { from, to, ready, setPeriod, label } = usePeriod();
+  const [draftFrom, setDraftFrom] = useState(from);
+  const [draftTo, setDraftTo] = useState(to);
   const tableRef = useRef<HTMLTableElement>(null);
   const [mode, setMode] = useState<ViewMode>('daily');
-  const [from, setFrom] = useState(() => toLocalDateString(new Date(now.getFullYear(), now.getMonth(), 1)));
-  const [to, setTo] = useState(() => toLocalDateString(now));
-  const [year, setYear] = useState(String(now.getFullYear()));
+  const [year, setYear] = useState(() => String(new Date().getFullYear()));
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [downloading, setDownloading] = useState<'xlsx'|'pdf'|null>(null);
 
-  const load = async () => {
+  useEffect(() => {
+    if (!ready) return;
+    setDraftFrom(from);
+    setDraftTo(to);
+    setYear(from.slice(0, 4) || String(new Date().getFullYear()));
+  }, [ready, from, to]);
+
+  const load = async (f = from, t = to) => {
     setLoading(true);
     setError('');
     try {
       const res = mode === 'daily'
-        ? await api.get('/dashboard/report/daily', { params: { from, to } })
+        ? await api.get('/dashboard/report/daily', { params: { from: f, to: t } })
         : await api.get('/dashboard/report/monthly', { params: { year } });
       setData(res.data);
     } catch (err) {
@@ -36,7 +44,11 @@ export default function LaporanPage() {
     } finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, [mode]);
+  useEffect(() => {
+    if (!ready) return;
+    load(from, to);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, mode, from, to, year]);
 
   const grandTotal: Record<string, number> = {};
   MP.forEach(mp => { grandTotal[mp] = data.reduce((a, r) => a + (r[mp]?.netSales || 0), 0); });
@@ -93,7 +105,7 @@ export default function LaporanPage() {
       const XLSX = await import('xlsx');
       const rows = buildRows();
       const wsData = [
-        [`Laporan Marketplace - ${mode === 'daily' ? `${from} s/d ${to}` : `Tahun ${year}`}`],
+        [`Laporan Marketplace - ${mode === 'daily' ? label : `Tahun ${year}`}`],
         [],
         [mode === 'daily' ? 'Tanggal' : 'Bulan', 'GrabFood', 'GoFood', 'ShopeeFood', 'Total'],
         ...rows.map(r => [r.label, r.values['GrabFood']||0, r.values['GoFood']||0, r.values['ShopeeFood']||0, r.values['total']||0]),
@@ -112,7 +124,7 @@ export default function LaporanPage() {
     setDownloading('pdf');
     try {
       const rows = buildRows();
-      const title = `Laporan Marketplace — ${mode === 'daily' ? `${from} s/d ${to}` : `Tahun ${year}`}`;
+      const title = `Laporan Marketplace — ${mode === 'daily' ? label : `Tahun ${year}`}`;
       const html = `
         <html><head><meta charset="utf-8"><style>
           body { font-family: Arial, sans-serif; font-size: 11px; padding: 20px; }
@@ -174,7 +186,9 @@ export default function LaporanPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">Laporan Marketplace</h1>
-          <p className="text-gray-500 text-sm mt-0.5">Net cair per merchant</p>
+          <p className="text-gray-500 text-sm mt-0.5">
+            Net cair per merchant{mode === 'daily' ? ` · ${label}` : ` · Tahun ${year}`}
+          </p>
         </div>
         {/* Download buttons */}
         {data.length > 0 && (
@@ -208,11 +222,11 @@ export default function LaporanPage() {
             <>
               <div>
                 <label className="text-xs text-gray-500 block mb-1">Dari</label>
-                <input type="date" className="input text-sm" value={from} onChange={e => setFrom(e.target.value)} />
+                <input type="date" className="input text-sm" value={draftFrom} onChange={e => setDraftFrom(e.target.value)} />
               </div>
               <div>
                 <label className="text-xs text-gray-500 block mb-1">Sampai</label>
-                <input type="date" className="input text-sm" value={to} onChange={e => setTo(e.target.value)} />
+                <input type="date" className="input text-sm" value={draftTo} onChange={e => setDraftTo(e.target.value)} />
               </div>
             </>
           ) : (
@@ -223,7 +237,15 @@ export default function LaporanPage() {
               </select>
             </div>
           )}
-          <button onClick={load} className="btn-primary text-sm">Tampilkan</button>
+          <button
+            onClick={() => {
+              if (mode === 'daily') setPeriod(draftFrom, draftTo);
+              else load();
+            }}
+            className="btn-primary text-sm"
+          >
+            Tampilkan
+          </button>
         </div>
       </div>
 
