@@ -60,79 +60,101 @@ export async function findOneOrder(id: string) {
   });
 }
 
-async function isDuplicate(row: any): Promise<boolean> {
-  const orderDate = new Date(row.orderDate);
-  const dayStart = new Date(orderDate);
-  dayStart.setHours(0, 0, 0, 0);
-  const dayEnd = new Date(orderDate);
-  dayEnd.setHours(23, 59, 59, 999);
-
-  let idPesanan = '';
+function rowIdPesanan(row: { items?: { productName?: string }[] }): string {
   try {
     const meta = JSON.parse(row.items?.[0]?.productName || '{}');
-    idPesanan = meta.idPesanan || '';
+    return meta.idPesanan || '';
   } catch {
-    /* old format */
+    return '';
   }
+}
 
+/** In-memory dedup key — mirrors legacy isDuplicate without N+1 queries. */
+function rowDedupKey(row: any): string {
+  const orderDate = new Date(row.orderDate);
+  const idPesanan = rowIdPesanan(row);
   if (idPesanan.startsWith('GRABFOOD-SUMMARY-')) {
-    const monthStart = new Date(orderDate.getFullYear(), orderDate.getMonth(), 1);
-    const monthEnd = new Date(orderDate.getFullYear(), orderDate.getMonth() + 1, 0, 23, 59, 59, 999);
-    const candidates = await prisma.order.findMany({
-      where: {
-        marketplace: row.marketplace,
-        orderDate: { gte: monthStart, lte: monthEnd },
-      },
-      include: { items: true },
-    });
-    return candidates.some((o) => {
-      try {
-        return JSON.parse(o.items?.[0]?.productName || '{}').idPesanan === idPesanan;
-      } catch {
-        return false;
-      }
-    });
+    return `summary|${row.marketplace}|${orderDate.getFullYear()}-${orderDate.getMonth()}|${idPesanan}`;
   }
-
-  const existing = await prisma.order.findFirst({
-    where: {
-      marketplace: row.marketplace,
-      orderDate: { gte: dayStart, lte: dayEnd },
-      grossSales: Number(row.grossSales).toString(),
-    },
-    include: { items: true },
-  });
-
-  if (!existing) return false;
-
-  if (idPesanan) {
-    try {
-      const existingMeta = JSON.parse(existing.items?.[0]?.productName || '{}');
-      return existingMeta.idPesanan === idPesanan;
-    } catch {
-      return true;
-    }
-  }
-  return true;
+  const dateKey = orderDate.toISOString().split('T')[0];
+  return `order|${row.marketplace}|${dateKey}|${Number(row.grossSales)}|${idPesanan}`;
 }
 
 export async function importCsvRows(rows: any[]) {
-  let created = 0;
+  if (!rows.length) return { created: 0, skipped: 0 };
+
+  const times = rows.map((r) => new Date(r.orderDate).getTime()).filter((t) => !Number.isNaN(t));
+  const rangeStart = new Date(Math.min(...times));
+  rangeStart.setDate(1);
+  rangeStart.setHours(0, 0, 0, 0);
+  const rangeEnd = new Date(Math.max(...times));
+  rangeEnd.setMonth(rangeEnd.getMonth() + 1, 0);
+  rangeEnd.setHours(23, 59, 59, 999);
+
+  const existing = await prisma.order.findMany({
+    where: { orderDate: { gte: rangeStart, lte: rangeEnd } },
+    select: {
+      marketplace: true,
+      orderDate: true,
+      grossSales: true,
+      items: { select: { productName: true } },
+    },
+  });
+
+  const seen = new Set(existing.map((o) => rowDedupKey(o)));
+  const toInsert: any[] = [];
   let skipped = 0;
-  const errors: string[] = [];
+
   for (const row of rows) {
-    try {
-      if (await isDuplicate(row)) {
-        skipped++;
-        continue;
-      }
-      await createOrder(row);
-      created++;
-    } catch (err: any) {
+    const key = rowDedupKey(row);
+    if (seen.has(key)) {
       skipped++;
+      continue;
+    }
+    seen.add(key);
+    toInsert.push(row);
+  }
+
+  const BATCH = 25;
+  let created = 0;
+  const errors: string[] = [];
+
+  for (let i = 0; i < toInsert.length; i += BATCH) {
+    const batch = toInsert.slice(i, i + BATCH);
+    try {
+      await prisma.$transaction(
+        batch.map((row) => {
+          const { items, marketplace, orderDate, grossSales, discount, commission, netSales, status } = row;
+          return prisma.order.create({
+            data: {
+              marketplace,
+              orderDate: new Date(orderDate),
+              grossSales: Number(grossSales).toString(),
+              discount: Number(discount || 0).toString(),
+              commission: Number(commission || 0).toString(),
+              netSales: Number(netSales).toString(),
+              status: status || 'COMPLETED',
+              items: items
+                ? {
+                    create: items.map((item: any) => ({
+                      productName: item.productName,
+                      qty: item.qty,
+                      unitPrice: Number(item.unitPrice).toString(),
+                      subtotal: Number(item.subtotal).toString(),
+                    })),
+                  }
+                : undefined,
+            },
+          });
+        }),
+      );
+      created += batch.length;
+    } catch (err: any) {
+      skipped += batch.length;
       const msg = err?.message || String(err);
       if (errors.length < 5) errors.push(msg);
     }
   }
+
   return { created, skipped, ...(errors.length ? { errors } : {}) };
 }

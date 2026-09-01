@@ -88,6 +88,8 @@ export class ImportService {
         rows = this.parseGrabStoreSummary(raw, filename);
       } else if (raw.length > 0 && this.isGoFoodCsv(Object.keys(raw[0]))) {
         rows = this.parseGoFoodCsv(raw);
+      } else if (raw.length > 0 && this.isGrabTransactionExport(Object.keys(raw[0]))) {
+        rows = this.parseGrabTransactionExport(raw);
       } else {
         rows = this.parseGrabCsv(buffer.toString('utf-8'));
       }
@@ -114,6 +116,9 @@ export class ImportService {
       }
       if (firstRaw.length > 0 && this.isGoFoodCsv(Object.keys(firstRaw[0]))) {
         return this.parseGoFoodCsv(firstRaw);
+      }
+      if (firstRaw.length > 0 && this.isGrabTransactionExport(Object.keys(firstRaw[0]))) {
+        return this.parseGrabTransactionExport(firstRaw);
       }
     }
 
@@ -190,6 +195,74 @@ export class ImportService {
       c.includes('payments')
     );
     return hasStore && hasNet && (hasOrders || hasPay);
+  }
+
+  /** Grab merchant portal: Download transactions → detailed export (Transaction_Store_*.csv) */
+  private isGrabTransactionExport(cols: string[]): boolean {
+    const n = cols.map((c) => c.toLowerCase().replace(/\s+/g, '').replace(/^\ufeff/, ''));
+    const hasTxId = n.some((c) => c === 'transactionid' || c.endsWith('transactionid'));
+    const hasNetSales = n.some((c) => c === 'netsales' || c.includes('netsales'));
+    const hasType = n.some((c) => c === 'type');
+    const hasStore = n.some((c) => c.includes('storename') || c === 'merchantname');
+    return hasTxId && hasNetSales && (hasType || hasStore);
+  }
+
+  /**
+   * Grab detailed transaction CSV/XLSX (Merchant/Store/Transaction ID/Net Sales/Total).
+   * Skips GrabFinance loans; imports GrabFood + OVO Payment rows.
+   */
+  private parseGrabTransactionExport(raw: any[]) {
+    const orders: any[] = [];
+
+    for (const row of raw) {
+      const type = String(row['Type'] || '').trim();
+      const category = String(row['Category'] || '').trim();
+      const status = String(row['Status'] || '').trim();
+
+      if (type === 'GrabFinance') continue;
+      if (category && category.toLowerCase() !== 'payment') continue;
+      if (status && !['completed', 'transferred'].includes(status.toLowerCase())) continue;
+
+      const netSalesCol = this.parseAmount(this.pickValue(row, ['Net Sales', 'NetSales']));
+      const totalCol = this.parseAmount(this.pickValue(row, ['Total']));
+      if (netSalesCol <= 0 && totalCol <= 0) continue;
+
+      const grossSales = netSalesCol > 0 ? netSalesCol : totalCol;
+      const netSales = totalCol > 0 ? totalCol : netSalesCol;
+      const commission = Math.max(0, Number((grossSales - netSales).toFixed(2)));
+
+      const txId = this.pickValue(row, ['Transaction ID', 'TransactionID']).trim();
+      const shortOrder = this.pickValue(row, ['Short Order ID', 'Short Order ID', 'Long Order ID']).trim();
+      const idPesanan = shortOrder || txId;
+      if (!idPesanan) continue;
+
+      const store = this.pickValue(row, ['Store Name', 'Merchant Name', 'Store']).trim();
+      const paymentMethod = this.pickValue(row, ['Payment Method', 'Order Channel', 'Channel']).trim();
+
+      const itemMeta = JSON.stringify({
+        jenis: type || 'GrabFood',
+        metode: paymentMethod || type || 'GrabPay',
+        idPesanan,
+        store,
+        biayaJasa: commission,
+        biayaSukses: 0,
+        mdr: 0,
+        tanggalTransfer: this.pickValue(row, ['Transfer Date']).trim(),
+        idPencairan: this.pickValue(row, ['Settlement ID']).trim(),
+      });
+
+      orders.push({
+        orderDate: this.parseDate(row['Created On'] || row['Updated On'] || row['Diperbarui Pada'] || ''),
+        marketplace: 'GRABFOOD',
+        grossSales,
+        discount: 0,
+        commission,
+        netSales: netSales > 0 ? netSales : grossSales - commission,
+        status: 'COMPLETED',
+        items: [{ productName: itemMeta, qty: 1, unitPrice: grossSales, subtotal: grossSales }],
+      });
+    }
+    return orders;
   }
 
   /** GoFood / GoBiz settlement export (CSV or XLSX with same columns) */

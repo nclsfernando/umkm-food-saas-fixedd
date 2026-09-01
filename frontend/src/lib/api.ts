@@ -20,8 +20,8 @@ const api = axios.create({
   timeout: 15000,
 });
 
-/** Multi-month GrabFood summary can take longer than the default 15s. */
-export const IMPORT_TIMEOUT_MS = 90_000;
+/** Large Grab/GoFood monthly exports can take >60s on cold DB. */
+export const IMPORT_TIMEOUT_MS = 180_000;
 
 /**
  * Turn axios / NestJS errors into short Indonesian UI text.
